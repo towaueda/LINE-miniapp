@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { createHash } from "crypto";
+
+function verifyInviteCode(code: string): boolean {
+  const hash = createHash("sha256").update(code).digest("hex");
+  return hash === process.env.INVITE_CODE_HASH;
+}
 
 export async function POST(request: Request) {
   try {
@@ -8,19 +13,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "code required" }, { status: 400 });
     }
 
-    const { data } = await supabaseAdmin
-      .from("invite_codes")
-      .select("*")
-      .eq("code", code)
-      .eq("is_active", true)
-      .is("used_by", null)
-      .single();
-
-    if (!data) {
-      return NextResponse.json({ valid: false });
-    }
-
-    return NextResponse.json({ valid: true, invite: data });
+    const valid = verifyInviteCode(code.trim());
+    return NextResponse.json({ valid });
   } catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

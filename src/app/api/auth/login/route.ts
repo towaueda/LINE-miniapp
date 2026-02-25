@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 import { verifyLineToken, getOrCreateUser } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { createHash } from "crypto";
+
+function verifyInviteCode(code: string): boolean {
+  const hash = createHash("sha256").update(code).digest("hex");
+  return hash === process.env.INVITE_CODE_HASH;
+}
 
 export async function POST(request: Request) {
   try {
@@ -23,30 +29,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Account is banned" }, { status: 403 });
     }
 
-    // If invite code provided and user not yet approved, process it
+    // If invite code provided and user not yet approved, validate via hash
     if (inviteCode && !user.is_approved) {
-      const { data: invite } = await supabaseAdmin
-        .from("invite_codes")
-        .select("*")
-        .eq("code", inviteCode)
-        .eq("is_active", true)
-        .is("used_by", null)
-        .single();
+      if (verifyInviteCode(inviteCode.trim())) {
+        await supabaseAdmin
+          .from("users")
+          .update({ is_approved: true, invited_by_code: "master" })
+          .eq("id", user.id);
 
-      if (invite) {
-        // Mark invite as used + Approve user (parallel)
-        await Promise.all([
-          supabaseAdmin
-            .from("invite_codes")
-            .update({ used_by: user.id, used_at: new Date().toISOString() })
-            .eq("id", invite.id),
-          supabaseAdmin
-            .from("users")
-            .update({ is_approved: true, invited_by_code: inviteCode })
-            .eq("id", user.id),
-        ]);
-
-        const updatedUser = { ...user, is_approved: true, invited_by_code: inviteCode };
+        const updatedUser = { ...user, is_approved: true, invited_by_code: "master" };
         return NextResponse.json({ user: updatedUser });
       }
     }
