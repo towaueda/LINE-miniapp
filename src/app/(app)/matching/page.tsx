@@ -29,7 +29,7 @@ function getNextWeekDates(): { label: string; value: string }[] {
 }
 
 export default function MatchingPage() {
-  const { user, isLiffMode, dbUser } = useLiff();
+  const { user, isReady, isLiffMode, dbUser } = useLiff();
   const router = useRouter();
   const [selectedDates, setSelectedDates] = useState<string[]>([]);
   const [selectedArea, setSelectedArea] = useState<string>("");
@@ -79,6 +79,8 @@ export default function MatchingPage() {
   }, [isLiffMode, dbUser]);
 
   useEffect(() => {
+    if (!isReady) return;
+
     if (!userLoggedIn) {
       router.push("/");
       return;
@@ -95,7 +97,7 @@ export default function MatchingPage() {
         } catch { /* ignore */ }
       }
     }
-  }, [userLoggedIn, userArea, router, isLiffMode, dbUser, checkStatus]);
+  }, [isReady, userLoggedIn, userArea, router, isLiffMode, dbUser, checkStatus]);
 
   const toggleDate = (val: string) => {
     setSelectedDates((prev) =>

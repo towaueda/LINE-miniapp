@@ -10,7 +10,7 @@ const MATCH_KEY = "triangle_match";
 const REVIEW_DONE_KEY = "triangle_review_done";
 
 export default function ReviewPage() {
-  const { user, isLiffMode, dbUser } = useLiff();
+  const { user, isReady, isLiffMode, dbUser } = useLiff();
   const router = useRouter();
   const [match, setMatch] = useState<MatchGroup | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -23,6 +23,8 @@ export default function ReviewPage() {
   const useApi = isLiffMode && !!dbUser;
 
   useEffect(() => {
+    if (!isReady) return;
+
     if (!userLoggedIn || !userId) {
       router.push("/");
       return;
@@ -55,7 +57,7 @@ export default function ReviewPage() {
         comment: "",
       }))
     );
-  }, [userLoggedIn, userId, router]);
+  }, [isReady, userLoggedIn, userId, router]);
 
   const memberMap = useMemo(
     () => (match ? new Map(match.members.map((m) => [m.id, m])) : new Map()),

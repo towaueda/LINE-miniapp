@@ -20,11 +20,12 @@ const MOCK_REPLIES = [
 ];
 
 export default function ChatPage() {
-  const { user, isLiffMode, dbUser } = useLiff();
+  const { user, isReady, isLiffMode, dbUser } = useLiff();
   const router = useRouter();
   const [mockMessages, setMockMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [match, setMatch] = useState<MatchGroup | null>(null);
+  const [noMatch, setNoMatch] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
   const isFirstRender = useRef(true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -32,6 +33,7 @@ export default function ChatPage() {
   const userLoggedIn = user?.isLoggedIn;
   const userId = user?.id;
   const userNickname = user?.nickname;
+  const hasProfile = !!user?.nickname;
 
   const useApi = isLiffMode && !!dbUser;
   const groupId = useApi ? match?.id || null : null;
@@ -41,6 +43,8 @@ export default function ChatPage() {
   const messages = useApi ? realtimeMessages : mockMessages;
 
   useEffect(() => {
+    if (!isReady) return;
+
     if (!userLoggedIn) {
       router.push("/");
       return;
@@ -48,9 +52,10 @@ export default function ChatPage() {
 
     const storedMatch = localStorage.getItem(MATCH_KEY);
     if (!storedMatch) {
-      router.push("/matching");
+      setNoMatch(true);
       return;
     }
+    setNoMatch(false);
     setMatch(JSON.parse(storedMatch));
 
     if (!useApi) {
@@ -63,7 +68,7 @@ export default function ChatPage() {
         localStorage.setItem(CHAT_KEY, JSON.stringify(initial));
       }
     }
-  }, [userLoggedIn, router, useApi]);
+  }, [isReady, userLoggedIn, router, useApi]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({
@@ -157,7 +162,29 @@ export default function ChatPage() {
     router.push("/review");
   };
 
-  if (!userLoggedIn || !match || !userId) return null;
+  if (!isReady || !userLoggedIn) return null;
+
+  if (noMatch) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[calc(100dvh-52px-56px)] px-6">
+        <div className="text-5xl mb-4">💬</div>
+        <p className="text-base font-semibold text-gray-700 text-center mb-2">
+          マッチしていません
+        </p>
+        <p className="text-sm text-gray-400 text-center mb-6">
+          プロフィールを記入してマッチングを行ってください
+        </p>
+        <button
+          onClick={() => router.push(hasProfile ? "/matching" : "/profile")}
+          className="bg-line hover:bg-line-dark text-white font-bold py-3 px-8 rounded-xl transition-all active:scale-[0.98]"
+        >
+          {hasProfile ? "マッチングへ" : "プロフィールを記入する"}
+        </button>
+      </div>
+    );
+  }
+
+  if (!match || !userId) return null;
 
   return (
     <div className="flex flex-col h-[calc(100dvh-52px-56px)]">
