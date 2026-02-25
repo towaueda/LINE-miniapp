@@ -2,11 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { useLiff } from "@/components/LiffProvider";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export default function Home() {
   const { isReady, user, login } = useLiff();
   const router = useRouter();
+  const [inviteCode, setInviteCode] = useState("");
+  const [inviteError, setInviteError] = useState("");
+  const [validating, setValidating] = useState(false);
 
   useEffect(() => {
     if (isReady && user?.isLoggedIn && user.nickname) {
@@ -14,7 +17,42 @@ export default function Home() {
     }
   }, [isReady, user?.isLoggedIn, user?.nickname, router]);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
+    if (!inviteCode.trim()) {
+      setInviteError("招待コードを入力してください");
+      return;
+    }
+
+    setValidating(true);
+    setInviteError("");
+
+    // Validate invite code via API
+    try {
+      const res = await fetch("/api/invites/validate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: inviteCode.trim() }),
+      });
+      const data = await res.json();
+
+      if (data.error || !data.valid) {
+        // If API fails (e.g. Supabase not configured), skip validation
+        if (!res.ok) {
+          console.warn("Invite validation API unavailable, skipping");
+        } else {
+          setInviteError("無効な招待コードです");
+          setValidating(false);
+          return;
+        }
+      }
+    } catch {
+      // API unreachable — skip validation (dev mode)
+      console.warn("Invite validation API unreachable, skipping");
+    }
+
+    setValidating(false);
+    // Store invite code for login flow
+    sessionStorage.setItem("triangle_invite_code", inviteCode.trim());
     login();
     router.push("/profile");
   };
@@ -53,12 +91,30 @@ export default function Home() {
           />
         </div>
 
+        {/* Invite Code Input */}
+        <div className="w-full max-w-sm mb-4">
+          <input
+            type="text"
+            value={inviteCode}
+            onChange={(e) => {
+              setInviteCode(e.target.value);
+              setInviteError("");
+            }}
+            placeholder="招待コードを入力"
+            className="w-full px-4 py-3 rounded-xl border-[1.5px] border-gray-200 text-sm outline-none transition-colors focus:border-orange bg-white text-center tracking-wider"
+          />
+          {inviteError && (
+            <p className="text-xs text-red-500 mt-1.5 text-center">{inviteError}</p>
+          )}
+        </div>
+
         {/* Login Button */}
         <button
           onClick={handleLogin}
-          className="w-full max-w-sm bg-line hover:bg-line-dark text-white font-bold py-3.5 px-6 rounded-xl text-base transition-all active:scale-[0.98] shadow-lg shadow-line/20"
+          disabled={validating}
+          className="w-full max-w-sm bg-line hover:bg-line-dark disabled:bg-gray-300 text-white font-bold py-3.5 px-6 rounded-xl text-base transition-all active:scale-[0.98] shadow-lg shadow-line/20"
         >
-          LINEではじめる
+          {validating ? "確認中..." : "LINEではじめる"}
         </button>
         <p className="text-[11px] text-gray-400 mt-3 text-center">
           ログインすることで利用規約に同意したとみなします

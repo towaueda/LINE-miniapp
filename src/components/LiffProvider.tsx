@@ -76,9 +76,10 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
             const liffUser: UserProfile = {
               id: profile.userId,
               nickname: existingUser?.nickname || profile.displayName,
-              ageGroup: existingUser?.ageGroup || "27-28",
+              birthYear: existingUser?.birthYear || 2000,
               area: existingUser?.area || "",
-              job: existingUser?.job || "",
+              industry: existingUser?.industry || "",
+              company: existingUser?.company || "",
               bio: existingUser?.bio || "",
               avatarEmoji: existingUser?.avatarEmoji || getRandomEmoji(),
               isLoggedIn: true,
@@ -86,18 +87,21 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
             setUserState(liffUser);
             saveUser(liffUser);
 
-            // Login to backend
+            // Login to backend with invite code if present
             try {
               const accessToken = liffInstance.getAccessToken();
+              const inviteCode = sessionStorage.getItem("triangle_invite_code");
               if (accessToken) {
                 const res = await fetch("/api/auth/login", {
                   method: "POST",
                   headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ accessToken }),
+                  body: JSON.stringify({ accessToken, inviteCode: inviteCode || undefined }),
                 });
                 if (res.ok) {
                   const data = await res.json();
                   setDbUserState(data.user);
+                  // Clear used invite code
+                  sessionStorage.removeItem("triangle_invite_code");
                 }
               }
             } catch (e) {
@@ -126,9 +130,10 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
       const mockUser: UserProfile = {
         id: "demo_user_1",
         nickname: "",
-        ageGroup: "27-28",
+        birthYear: 2000,
         area: "",
-        job: "",
+        industry: "",
+        company: "",
         bio: "",
         avatarEmoji: getRandomEmoji(),
         isLoggedIn: true,

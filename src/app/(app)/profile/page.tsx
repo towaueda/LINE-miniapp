@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useLiff } from "@/components/LiffProvider";
-import { AGE_OPTIONS, AREA_LABELS, AreaOption, JOB_OPTIONS } from "@/types";
+import { AGE_OPTIONS, AREA_LABELS, AreaOption, INDUSTRY_OPTIONS } from "@/types";
 import { apiFetch } from "@/lib/api";
 
 export default function ProfilePage() {
@@ -11,9 +11,11 @@ export default function ProfilePage() {
   const router = useRouter();
 
   const [nickname, setNickname] = useState("");
-  const [ageGroup, setAgeGroup] = useState<string>("27-28");
+  const currentYear = new Date().getFullYear();
+  const [birthYear, setBirthYear] = useState<number>(currentYear - 25);
   const [area, setArea] = useState<string>("");
-  const [job, setJob] = useState<string>("");
+  const [industry, setIndustry] = useState<string>("");
+  const [company, setCompany] = useState("");
   const [bio, setBio] = useState("");
   const initialized = useRef(false);
 
@@ -25,14 +27,15 @@ export default function ProfilePage() {
     if (!initialized.current) {
       initialized.current = true;
       if (user.nickname) setNickname(user.nickname);
-      if (user.ageGroup) setAgeGroup(user.ageGroup);
+      if (user.birthYear) setBirthYear(user.birthYear);
       if (user.area) setArea(user.area);
-      if (user.job) setJob(user.job);
+      if (user.industry) setIndustry(user.industry);
+      if (user.company) setCompany(user.company);
       if (user.bio) setBio(user.bio);
     }
   }, [user, router]);
 
-  const isValid = nickname.trim() && area && job;
+  const isValid = nickname.trim() && area && industry;
 
   const [saving, setSaving] = useState(false);
 
@@ -43,9 +46,10 @@ export default function ProfilePage() {
     const updatedUser = {
       ...user,
       nickname: nickname.trim(),
-      ageGroup: ageGroup as "24-26" | "27-28" | "29-30",
+      birthYear,
       area,
-      job,
+      industry,
+      company: company.trim(),
       bio: bio.trim(),
     };
     setUser(updatedUser);
@@ -57,9 +61,10 @@ export default function ProfilePage() {
           method: "PUT",
           body: JSON.stringify({
             nickname: nickname.trim(),
-            ageGroup,
+            birthYear,
             area,
-            job,
+            industry,
+            company: company.trim(),
             bio: bio.trim(),
             avatarEmoji: user.avatarEmoji,
           }),
@@ -96,24 +101,24 @@ export default function ProfilePage() {
           />
         </Field>
 
-        {/* Age Group */}
-        <Field label="年齢層" required>
-          <div className="flex gap-2">
-            {AGE_OPTIONS.map((opt) => (
-              <ChipButton
-                key={opt.value}
-                selected={ageGroup === opt.value}
-                onClick={() => setAgeGroup(opt.value)}
-              >
-                {opt.label}
-              </ChipButton>
+        {/* Age */}
+        <Field label="年齢" required>
+          <select
+            value={currentYear - birthYear}
+            onChange={(e) => setBirthYear(currentYear - Number(e.target.value))}
+            className="w-full px-4 py-3 rounded-xl border-[1.5px] border-gray-200 text-sm outline-none transition-colors focus:border-orange bg-white"
+          >
+            {AGE_OPTIONS.map((age) => (
+              <option key={age} value={age}>
+                {age}歳
+              </option>
             ))}
-          </div>
+          </select>
         </Field>
 
         {/* Area */}
         <Field label="エリア" required>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-3 gap-2">
             {(Object.entries(AREA_LABELS) as [AreaOption, string][]).map(
               ([key, label]) => (
                 <ChipButton
@@ -128,19 +133,31 @@ export default function ProfilePage() {
           </div>
         </Field>
 
-        {/* Job */}
-        <Field label="職種" required>
+        {/* Industry */}
+        <Field label="業種" required>
           <div className="flex flex-wrap gap-2">
-            {JOB_OPTIONS.map((opt) => (
+            {INDUSTRY_OPTIONS.map((opt) => (
               <ChipButton
                 key={opt.value}
-                selected={job === opt.value}
-                onClick={() => setJob(opt.value)}
+                selected={industry === opt.value}
+                onClick={() => setIndustry(opt.value)}
               >
                 {opt.label}
               </ChipButton>
             ))}
           </div>
+        </Field>
+
+        {/* Company */}
+        <Field label="会社名" optional>
+          <input
+            type="text"
+            value={company}
+            onChange={(e) => setCompany(e.target.value)}
+            placeholder="例：株式会社〇〇"
+            maxLength={30}
+            className="w-full px-4 py-3 rounded-xl border-[1.5px] border-gray-200 text-sm outline-none transition-colors focus:border-orange bg-white"
+          />
         </Field>
 
         {/* Bio */}

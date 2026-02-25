@@ -1,9 +1,10 @@
 export interface UserProfile {
   id: string;
   nickname: string;
-  ageGroup: "24-26" | "27-28" | "29-30";
+  birthYear: number;
   area: string;
-  job: string;
+  industry: string;
+  company: string;
   bio: string;
   avatarEmoji: string;
   isLoggedIn: boolean;
@@ -22,8 +23,8 @@ export interface MatchGroup {
 export interface MatchMember {
   id: string;
   nickname: string;
-  ageGroup: string;
-  job: string;
+  birthYear: number;
+  industry: string;
   avatarEmoji: string;
   bio: string;
 }
@@ -46,28 +47,38 @@ export interface Review {
   comment: string;
 }
 
-export type AreaOption = "umeda" | "yodoyabashi" | "namba" | "tennoji";
+export type AreaOption = "umeda" | "yodoyabashi" | "honmachi" | "namba" | "tennoji";
 
 export const AREA_LABELS: Record<AreaOption, string> = {
   umeda: "梅田",
-  yodoyabashi: "淀屋橋・本町",
+  yodoyabashi: "淀屋橋",
+  honmachi: "本町",
   namba: "難波",
   tennoji: "天王寺",
 };
 
-export const JOB_OPTIONS = [
-  { value: "it", label: "IT・エンジニア" },
-  { value: "sales", label: "営業" },
-  { value: "marketing", label: "マーケティング" },
-  { value: "creative", label: "クリエイティブ" },
+export const INDUSTRY_OPTIONS = [
+  { value: "it", label: "IT" },
+  { value: "finance", label: "金融" },
+  { value: "manufacturer", label: "メーカー" },
+  { value: "trading", label: "商社" },
+  { value: "service", label: "サービス" },
+  { value: "consulting", label: "コンサル" },
+  { value: "media", label: "広告・メディア" },
+  { value: "realestate", label: "不動産" },
+  { value: "medical", label: "医療" },
   { value: "other", label: "その他" },
 ];
 
-export const AGE_OPTIONS = [
-  { value: "24-26", label: "24〜26歳" },
-  { value: "27-28", label: "27〜28歳" },
-  { value: "29-30", label: "29〜30歳" },
-];
+export const BIRTH_YEAR_OPTIONS: number[] = [];
+for (let y = 1990; y <= 2005; y++) {
+  BIRTH_YEAR_OPTIONS.push(y);
+}
+
+export const AGE_OPTIONS: number[] = [];
+for (let a = 20; a <= 45; a++) {
+  AGE_OPTIONS.push(a);
+}
 
 // --- DB Types ---
 
@@ -75,13 +86,16 @@ export interface DbUser {
   id: string;
   line_user_id: string;
   nickname: string | null;
-  age_group: "24-26" | "27-28" | "29-30" | null;
+  birth_year: number | null;
   area: AreaOption | null;
-  job: string | null;
+  industry: string | null;
+  company: string | null;
   bio: string | null;
   avatar_emoji: string | null;
   is_banned: boolean;
   ban_reason: string | null;
+  is_approved: boolean;
+  invited_by_code: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -10,13 +10,14 @@ export async function PUT(request: Request) {
 
   try {
     const body = await request.json();
-    const { nickname, ageGroup, area, job, bio, avatarEmoji } = body;
+    const { nickname, birthYear, area, industry, company, bio, avatarEmoji } = body;
 
     const updates: Record<string, unknown> = {};
     if (nickname !== undefined) updates.nickname = nickname;
-    if (ageGroup !== undefined) updates.age_group = ageGroup;
+    if (birthYear !== undefined) updates.birth_year = birthYear;
     if (area !== undefined) updates.area = area;
-    if (job !== undefined) updates.job = job;
+    if (industry !== undefined) updates.industry = industry;
+    if (company !== undefined) updates.company = company;
     if (bio !== undefined) updates.bio = bio;
     if (avatarEmoji !== undefined) updates.avatar_emoji = avatarEmoji;
 

@@ -11,13 +11,16 @@ CREATE TABLE users (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   line_user_id TEXT UNIQUE NOT NULL,
   nickname TEXT,
-  age_group TEXT CHECK (age_group IN ('24-26', '27-28', '29-30')),
-  area TEXT CHECK (area IN ('umeda', 'yodoyabashi', 'namba', 'tennoji')),
-  job TEXT,
+  birth_year INTEGER,
+  area TEXT CHECK (area IN ('umeda', 'yodoyabashi', 'honmachi', 'namba', 'tennoji')),
+  industry TEXT,
+  company TEXT,
   bio TEXT,
   avatar_emoji TEXT DEFAULT '😊',
   is_banned BOOLEAN DEFAULT FALSE,
   ban_reason TEXT,
+  is_approved BOOLEAN DEFAULT FALSE,
+  invited_by_code TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -30,7 +33,7 @@ CREATE INDEX idx_users_line_user_id ON users(line_user_id);
 CREATE TABLE match_requests (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  area TEXT NOT NULL CHECK (area IN ('umeda', 'yodoyabashi', 'namba', 'tennoji')),
+  area TEXT NOT NULL CHECK (area IN ('umeda', 'yodoyabashi', 'honmachi', 'namba', 'tennoji')),
   available_dates DATE[] NOT NULL,
   status TEXT NOT NULL DEFAULT 'waiting' CHECK (status IN ('waiting', 'matched', 'expired', 'cancelled')),
   matched_group_id UUID,
@@ -46,7 +49,7 @@ CREATE INDEX idx_match_requests_user_id ON match_requests(user_id);
 -- ==========================================
 CREATE TABLE match_groups (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  area TEXT NOT NULL CHECK (area IN ('umeda', 'yodoyabashi', 'namba', 'tennoji')),
+  area TEXT NOT NULL CHECK (area IN ('umeda', 'yodoyabashi', 'honmachi', 'namba', 'tennoji')),
   date DATE NOT NULL,
   time TEXT NOT NULL DEFAULT '12:00',
   restaurant_id UUID,
@@ -126,6 +129,12 @@ CREATE TABLE invite_codes (
 
 CREATE INDEX idx_invite_codes_code ON invite_codes(code);
 
+-- Seed: Default Invite Codes (for testing)
+INSERT INTO invite_codes (code) VALUES
+  ('TRI-WELCOME'),
+  ('TRI-TESTCODE'),
+  ('TRI-2026');
+
 -- ==========================================
 -- 8. Blacklist
 -- ==========================================
@@ -158,7 +167,7 @@ CREATE INDEX idx_notifications_global ON notifications(is_global);
 CREATE TABLE restaurants (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name TEXT NOT NULL,
-  area TEXT NOT NULL CHECK (area IN ('umeda', 'yodoyabashi', 'namba', 'tennoji')),
+  area TEXT NOT NULL CHECK (area IN ('umeda', 'yodoyabashi', 'honmachi', 'namba', 'tennoji')),
   address TEXT,
   description TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW()
@@ -172,6 +181,7 @@ CREATE INDEX idx_restaurants_area ON restaurants(area);
 INSERT INTO restaurants (name, area, description) VALUES
   ('GARB MONAQUE', 'umeda', 'おしゃれなカフェダイニング'),
   ('北浜レトロ', 'yodoyabashi', 'レトロな雰囲気のカフェ'),
+  ('本町ガーデンシティ', 'honmachi', 'オフィス街のおしゃれランチ'),
   ('道頓堀クラフトビア醸造所', 'namba', 'クラフトビールとランチ'),
   ('てんしば イーナ', 'tennoji', '天王寺公園内のカフェ');
 

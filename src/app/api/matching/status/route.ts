@@ -9,6 +9,31 @@ export async function GET(request: Request) {
   }
 
   try {
+    // Check for pending reviews
+    let hasPendingReview = false;
+    const { data: memberGroups } = await supabaseAdmin
+      .from("match_group_members")
+      .select("group_id, match_groups(id, status)")
+      .eq("user_id", user.id);
+
+    if (memberGroups) {
+      for (const mg of memberGroups) {
+        const group = mg.match_groups as unknown as { id: string; status: string } | null;
+        if (group && group.status === "completed") {
+          const { count } = await supabaseAdmin
+            .from("reviews")
+            .select("*", { count: "exact", head: true })
+            .eq("group_id", group.id)
+            .eq("reviewer_id", user.id);
+
+          if (count === 0) {
+            hasPendingReview = true;
+            break;
+          }
+        }
+      }
+    }
+
     // Check for active match request
     const { data: activeReq } = await supabaseAdmin
       .from("match_requests")
@@ -20,7 +45,7 @@ export async function GET(request: Request) {
       .single();
 
     if (activeReq) {
-      return NextResponse.json({ status: "waiting", request: activeReq });
+      return NextResponse.json({ status: "waiting", request: activeReq, hasPendingReview });
     }
 
     // Check for active match group
@@ -44,18 +69,19 @@ export async function GET(request: Request) {
       if (activeGroup) {
         const { data: members } = await supabaseAdmin
           .from("match_group_members")
-          .select("user_id, users(id, nickname, age_group, job, avatar_emoji, bio)")
+          .select("user_id, users(id, nickname, birth_year, industry, avatar_emoji, bio)")
           .eq("group_id", activeGroup.id);
 
         return NextResponse.json({
           status: "matched",
           group: activeGroup,
           members: members?.map((m) => m.users),
+          hasPendingReview,
         });
       }
     }
 
-    return NextResponse.json({ status: "idle" });
+    return NextResponse.json({ status: "idle", hasPendingReview });
   } catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

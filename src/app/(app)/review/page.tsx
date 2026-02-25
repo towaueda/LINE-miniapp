@@ -168,51 +168,61 @@ export default function ReviewPage() {
       </p>
 
       <div className="space-y-6">
-        {reviews.map((review, idx) => (
-          <div
-            key={review.targetId}
-            className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm"
-          >
-            <div className="flex items-center gap-2 mb-4">
-              <span className="text-2xl">
-                {memberMap.get(review.targetId)?.avatarEmoji || "👤"}
-              </span>
-              <span className="font-semibold">{review.targetName}</span>
-            </div>
+        {reviews.map((review, idx) => {
+          const member = memberMap.get(review.targetId);
+          return (
+            <div
+              key={review.targetId}
+              className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <span className="text-2xl">
+                  {member?.avatarEmoji || "👤"}
+                </span>
+                <div>
+                  <span className="font-semibold">{review.targetName}</span>
+                  {member?.birthYear && member.birthYear > 0 && (
+                    <span className="text-[11px] text-gray-400 ml-2">
+                      {member.birthYear}年生
+                    </span>
+                  )}
+                </div>
+              </div>
 
-            <div className="space-y-4">
-              <StarRating
-                label="話しやすさ"
-                value={review.communication}
-                onChange={(v) => updateReview(idx, "communication", v)}
-              />
-              <StarRating
-                label="時間厳守"
-                value={review.punctuality}
-                onChange={(v) => updateReview(idx, "punctuality", v)}
-              />
-              <StarRating
-                label="また会いたい度"
-                value={review.meetAgain}
-                onChange={(v) => updateReview(idx, "meetAgain", v)}
-              />
-
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">
-                  コメント（任意）
-                </label>
-                <input
-                  type="text"
-                  value={review.comment}
-                  onChange={(e) => updateReview(idx, "comment", e.target.value)}
-                  placeholder="ひとことメッセージ"
-                  maxLength={50}
-                  className="w-full px-3 py-2 bg-gray-50 rounded-lg text-sm outline-none focus:ring-1 focus:ring-orange/30"
+              <div className="space-y-4">
+                <StarRating
+                  label="話しやすさ"
+                  value={review.communication}
+                  onChange={(v) => updateReview(idx, "communication", v)}
                 />
+                <StarRating
+                  label="時間厳守"
+                  value={review.punctuality}
+                  onChange={(v) => updateReview(idx, "punctuality", v)}
+                />
+                <StarRating
+                  label="また会いたい度"
+                  value={review.meetAgain}
+                  onChange={(v) => updateReview(idx, "meetAgain", v)}
+                />
+
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">
+                    コメント（任意）
+                  </label>
+                  <input
+                    type="text"
+                    value={review.comment}
+                    onChange={(e) => updateReview(idx, "comment", e.target.value)}
+                    placeholder="ひとことメッセージ"
+                    maxLength={50}
+                    className="w-full px-3 py-2 bg-gray-50 rounded-lg text-sm outline-none focus:ring-1 focus:ring-orange/30"
+                  />
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <button

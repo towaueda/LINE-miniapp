@@ -3,29 +3,34 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useLiff } from "@/components/LiffProvider";
-import { AREA_LABELS, AreaOption, MatchGroup } from "@/types";
+import { AREA_LABELS, AreaOption, INDUSTRY_OPTIONS, MatchGroup } from "@/types";
 import { MOCK_MEMBERS, MOCK_RESTAURANTS } from "@/lib/mockData";
 import { apiFetch } from "@/lib/api";
 
 const MATCH_STORAGE_KEY = "triangle_match";
 
-const DAY_NAMES = ["日", "月", "火", "水", "木", "金", "土"] as const;
-
-function getNextWeekDates(): { label: string; value: string }[] {
-  const dates = [];
+function getNextThursdays(): { label: string; value: string }[] {
+  const dates: { label: string; value: string }[] = [];
   const today = new Date();
-  for (let i = 1; i <= 7; i++) {
+
+  for (let i = 1; i <= 28; i++) {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
-    const month = d.getMonth() + 1;
-    const day = d.getDate();
-    const dayName = DAY_NAMES[d.getDay()];
-    dates.push({
-      label: `${month}/${day}(${dayName})`,
-      value: d.toISOString().split("T")[0],
-    });
+    if (d.getDay() === 4) {
+      // Thursday
+      const month = d.getMonth() + 1;
+      const day = d.getDate();
+      dates.push({
+        label: `${month}/${day}(木)`,
+        value: d.toISOString().split("T")[0],
+      });
+    }
   }
   return dates;
+}
+
+function getIndustryLabel(value: string): string {
+  return INDUSTRY_OPTIONS.find((o) => o.value === value)?.label || value;
 }
 
 export default function MatchingPage() {
@@ -36,7 +41,8 @@ export default function MatchingPage() {
   const [matchResult, setMatchResult] = useState<MatchGroup | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [isWaiting, setIsWaiting] = useState(false);
-  const [dates] = useState(getNextWeekDates);
+  const [hasPendingReview, setHasPendingReview] = useState(false);
+  const [dates] = useState(getNextThursdays);
 
   const userLoggedIn = user?.isLoggedIn;
   const userArea = user?.area;
@@ -47,9 +53,14 @@ export default function MatchingPage() {
     try {
       const data = await apiFetch<{
         status: string;
+        hasPendingReview?: boolean;
         group?: { id: string; area: string; date: string; time: string; restaurant_name: string; status: string };
-        members?: { id: string; nickname: string; age_group: string; job: string; avatar_emoji: string; bio: string }[];
+        members?: { id: string; nickname: string; birth_year: number; industry: string; avatar_emoji: string; bio: string }[];
       }>("/api/matching/status");
+
+      if (data.hasPendingReview) {
+        setHasPendingReview(true);
+      }
 
       if (data.status === "matched" && data.group && data.members) {
         const match: MatchGroup = {
@@ -57,8 +68,8 @@ export default function MatchingPage() {
           members: data.members.map((m) => ({
             id: m.id,
             nickname: m.nickname || "",
-            ageGroup: m.age_group || "",
-            job: m.job || "",
+            birthYear: m.birth_year || 0,
+            industry: m.industry || "",
             avatarEmoji: m.avatar_emoji || "😊",
             bio: m.bio || "",
           })),
@@ -114,8 +125,9 @@ export default function MatchingPage() {
       try {
         const data = await apiFetch<{
           status: string;
+          error?: string;
           group?: { id: string; area: string; date: string; time: string; restaurant_name: string; status: string };
-          members?: { id: string; nickname: string; age_group: string; job: string; avatar_emoji: string; bio: string }[];
+          members?: { id: string; nickname: string; birth_year: number; industry: string; avatar_emoji: string; bio: string }[];
         }>("/api/matching/request", {
           method: "POST",
           body: JSON.stringify({ area: selectedArea, dates: selectedDates }),
@@ -127,8 +139,8 @@ export default function MatchingPage() {
             members: data.members.map((m) => ({
               id: m.id,
               nickname: m.nickname || "",
-              ageGroup: m.age_group || "",
-              job: m.job || "",
+              birthYear: m.birth_year || 0,
+              industry: m.industry || "",
               avatarEmoji: m.avatar_emoji || "😊",
               bio: m.bio || "",
             })),
@@ -160,8 +172,8 @@ export default function MatchingPage() {
             {
               id: user.id,
               nickname: user.nickname,
-              ageGroup: user.ageGroup,
-              job: user.job,
+              birthYear: user.birthYear,
+              industry: user.industry,
               avatarEmoji: user.avatarEmoji,
               bio: user.bio,
             },
@@ -196,6 +208,22 @@ export default function MatchingPage() {
 
   return (
     <div className="px-4 py-6">
+      {/* Pending Review Banner */}
+      {hasPendingReview && (
+        <div className="bg-orange/10 border border-orange/30 rounded-xl p-4 mb-4">
+          <p className="text-sm font-semibold text-orange mb-1">レビュー未完了</p>
+          <p className="text-xs text-gray-600 mb-3">
+            前回のマッチングのレビューを完了してからマッチングをリクエストしてください。
+          </p>
+          <button
+            onClick={() => router.push("/review")}
+            className="bg-orange text-white text-xs font-bold py-2 px-4 rounded-lg"
+          >
+            レビューページへ
+          </button>
+        </div>
+      )}
+
       {matchResult ? (
         <MatchResultView match={matchResult} userId={user!.id} onReset={() => {
           setMatchResult(null);
@@ -208,45 +236,48 @@ export default function MatchingPage() {
         <div className="animate-fade-in">
           <h2 className="text-xl font-bold mb-1">マッチングを探す</h2>
           <p className="text-sm text-gray-500 mb-6">
-            空いている日とエリアを選んでください
+            参加したい木曜日とエリアを選んでください
           </p>
 
-          {/* Date Selection */}
+          {/* Date Selection (Thursdays only) */}
           <div className="mb-6">
             <label className="block text-sm font-semibold mb-3">
-              空き日程を選択 <span className="text-orange text-xs">複数OK</span>
+              日程を選択（毎週木曜） <span className="text-orange text-xs">複数OK</span>
             </label>
             <div className="grid grid-cols-4 gap-2">
               {dates.map((d) => (
                 <button
                   key={d.value}
                   onClick={() => toggleDate(d.value)}
+                  disabled={hasPendingReview}
                   className={`py-2.5 rounded-lg text-xs font-medium transition-all border ${
                     selectedDates.includes(d.value)
                       ? "bg-orange text-white border-orange"
                       : "bg-white text-gray-600 border-gray-200"
-                  }`}
+                  } disabled:opacity-50`}
                 >
                   {d.label}
                 </button>
               ))}
             </div>
+            <p className="text-[11px] text-gray-400 mt-2">時間: 12:00〜13:00 固定</p>
           </div>
 
           {/* Area Selection */}
           <div className="mb-8">
             <label className="block text-sm font-semibold mb-3">エリア</label>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {(Object.entries(AREA_LABELS) as [AreaOption, string][]).map(
                 ([key, label]) => (
                   <button
                     key={key}
                     onClick={() => setSelectedArea(key)}
+                    disabled={hasPendingReview}
                     className={`py-2.5 rounded-lg text-sm font-medium transition-all border ${
                       selectedArea === key
                         ? "bg-orange text-white border-orange"
                         : "bg-white text-gray-600 border-gray-200"
-                    }`}
+                    } disabled:opacity-50`}
                   >
                     {label}
                   </button>
@@ -258,7 +289,7 @@ export default function MatchingPage() {
           {/* Search Button */}
           <button
             onClick={handleSearch}
-            disabled={!selectedDates.length || !selectedArea || isSearching}
+            disabled={!selectedDates.length || !selectedArea || isSearching || hasPendingReview}
             className="w-full bg-line hover:bg-line-dark disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold py-3.5 rounded-xl transition-all active:scale-[0.98]"
           >
             {isSearching ? (
@@ -335,7 +366,7 @@ function MatchResultView({
         <div className="flex items-center gap-2">
           <span className="text-lg">📅</span>
           <p className="text-sm">
-            {match.date} {match.time}〜
+            {match.date} {match.time}〜13:00
           </p>
         </div>
       </div>
@@ -352,11 +383,13 @@ function MatchResultView({
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
                   <span className="font-semibold text-sm">{member.nickname}</span>
-                  <span className="text-[11px] text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">
-                    {member.ageGroup}歳
-                  </span>
+                  {member.birthYear > 0 && (
+                    <span className="text-[11px] text-gray-400 bg-gray-50 px-2 py-0.5 rounded-full">
+                      {member.birthYear}年生
+                    </span>
+                  )}
                 </div>
-                <p className="text-xs text-orange mb-1">{member.job}</p>
+                <p className="text-xs text-orange mb-1">{getIndustryLabel(member.industry)}</p>
                 <p className="text-xs text-gray-500">{member.bio}</p>
               </div>
             </div>

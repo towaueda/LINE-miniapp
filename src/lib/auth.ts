@@ -14,7 +14,7 @@ export async function verifyLineToken(accessToken: string): Promise<{ userId: st
   }
 }
 
-export async function getOrCreateUser(lineUserId: string, displayName: string): Promise<DbUser | null> {
+export async function getOrCreateUser(lineUserId: string, displayName: string, inviteCode?: string): Promise<DbUser | null> {
   const { data: existing } = await supabaseAdmin
     .from("users")
     .select("*")
@@ -29,6 +29,8 @@ export async function getOrCreateUser(lineUserId: string, displayName: string): 
       line_user_id: lineUserId,
       nickname: displayName,
       avatar_emoji: "😊",
+      is_approved: false,
+      invited_by_code: inviteCode || null,
     })
     .select()
     .single();

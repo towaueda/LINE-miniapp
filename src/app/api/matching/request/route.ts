@@ -16,6 +16,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "area and dates required" }, { status: 400 });
     }
 
+    // Check for pending reviews
+    const { data: memberGroups } = await supabaseAdmin
+      .from("match_group_members")
+      .select("group_id, match_groups(id, status)")
+      .eq("user_id", user.id);
+
+    if (memberGroups) {
+      for (const mg of memberGroups) {
+        const group = mg.match_groups as unknown as { id: string; status: string } | null;
+        if (group && group.status === "completed") {
+          // Check if user submitted reviews for this group
+          const { count } = await supabaseAdmin
+            .from("reviews")
+            .select("*", { count: "exact", head: true })
+            .eq("group_id", group.id)
+            .eq("reviewer_id", user.id);
+
+          if (count === 0) {
+            return NextResponse.json({
+              error: "レビュー未完了のマッチングがあります",
+              hasPendingReview: true,
+            }, { status: 400 });
+          }
+        }
+      }
+    }
+
     // Cancel any existing waiting request
     await supabaseAdmin
       .from("match_requests")
@@ -52,7 +79,7 @@ export async function POST(request: Request) {
 
       const { data: members } = await supabaseAdmin
         .from("match_group_members")
-        .select("user_id, users(id, nickname, age_group, job, avatar_emoji, bio)")
+        .select("user_id, users(id, nickname, birth_year, industry, avatar_emoji, bio)")
         .eq("group_id", groupId);
 
       return NextResponse.json({

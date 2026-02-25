@@ -72,7 +72,7 @@ export default function AdminUsersPage() {
             <tr>
               <th className="text-left px-4 py-3 font-medium text-gray-500">ユーザー</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">エリア</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">職種</th>
+              <th className="text-left px-4 py-3 font-medium text-gray-500">業種</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">登録日</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">状態</th>
               <th className="text-left px-4 py-3 font-medium text-gray-500">操作</th>
@@ -86,14 +86,14 @@ export default function AdminUsersPage() {
                     <span>{u.avatar_emoji || "👤"}</span>
                     <div>
                       <p className="font-medium">{u.nickname || "未設定"}</p>
-                      <p className="text-xs text-gray-400">{u.age_group}歳</p>
+                      <p className="text-xs text-gray-400">{u.birth_year ? `${u.birth_year}年生` : ""}</p>
                     </div>
                   </div>
                 </td>
                 <td className="px-4 py-3 text-gray-600">
                   {u.area ? AREA_LABELS[u.area as AreaOption] : "-"}
                 </td>
-                <td className="px-4 py-3 text-gray-600">{u.job || "-"}</td>
+                <td className="px-4 py-3 text-gray-600">{u.industry || "-"}</td>
                 <td className="px-4 py-3 text-gray-400">
                   {new Date(u.created_at).toLocaleDateString("ja-JP")}
                 </td>
