@@ -14,14 +14,14 @@ export default function Header() {
           <span className="text-foreground">angle</span>
         </span>
       </div>
-      {user?.isLoggedIn && (
+      {user?.isLoggedIn ? (
         <button
           onClick={logout}
           className="text-xs text-gray-400 hover:text-gray-600 transition-colors"
         >
           ログアウト
         </button>
-      )}
+      ) : null}
     </header>
   );
 }

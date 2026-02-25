@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { supabase } from "@/lib/supabase/client";
-import { ChatMessage } from "@/types";
+import type { ChatMessage } from "@/types";
 import { apiFetch } from "@/lib/api";
 
 interface DbMessagePayload {
@@ -13,6 +12,12 @@ interface DbMessagePayload {
   text: string;
   is_system: boolean;
   created_at: string;
+}
+
+interface ChatResponse {
+  messages: DbMessagePayload[];
+  hasMore: boolean;
+  nextCursor: string | null;
 }
 
 function dbToChat(msg: DbMessagePayload): ChatMessage {
@@ -32,53 +37,90 @@ function dbToChat(msg: DbMessagePayload): ChatMessage {
 export function useRealtimeChat(groupId: string | null) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
-  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const nextCursorRef = useRef<string | null>(null);
+  const loadingMoreRef = useRef(false);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const channelRef = useRef<any>(null);
 
-  // Load history
+  // 初期履歴の読み込み
   useEffect(() => {
     if (!groupId) return;
     setLoading(true);
 
-    apiFetch<{ messages: DbMessagePayload[] }>(`/api/chat/${groupId}`)
+    apiFetch<ChatResponse>(`/api/chat/${groupId}`)
       .then((data) => {
         setMessages(data.messages.map(dbToChat));
+        setHasMore(data.hasMore);
+        nextCursorRef.current = data.nextCursor;
       })
       .catch((e) => {
-        console.error("Failed to load chat history:", e);
+        console.error("チャット履歴の読み込み失敗:", e);
       })
       .finally(() => setLoading(false));
   }, [groupId]);
 
-  // Subscribe to realtime
+  // リアルタイム購読（Supabase を動的インポート）
   useEffect(() => {
     if (!groupId) return;
+    if (channelRef.current) return; // Strict Mode 二重登録ガード
 
-    const channel = supabase
-      .channel(`chat:${groupId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `group_id=eq.${groupId}`,
-        },
-        (payload) => {
-          const newMsg = dbToChat(payload.new as DbMessagePayload);
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === newMsg.id)) return prev;
-            return [...prev, newMsg];
-          });
-        }
-      )
-      .subscribe();
+    let cancelled = false;
 
-    channelRef.current = channel;
+    import("@/lib/supabase/client").then(({ supabase }) => {
+      if (cancelled) return;
+
+      const channel = supabase
+        .channel(`chat:${groupId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: `group_id=eq.${groupId}`,
+          },
+          (payload) => {
+            const newMsg = dbToChat(payload.new as DbMessagePayload);
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id)) return prev;
+              return [...prev, newMsg];
+            });
+          }
+        )
+        .subscribe();
+
+      channelRef.current = channel;
+    });
 
     return () => {
-      channel.unsubscribe();
+      cancelled = true;
+      if (channelRef.current) {
+        channelRef.current.unsubscribe();
+        channelRef.current = null;
+      }
     };
   }, [groupId]);
+
+  // 過去のメッセージを読み込み（ページネーション）
+  const loadMore = useCallback(async () => {
+    if (!groupId || !hasMore || loadingMoreRef.current || !nextCursorRef.current) return;
+    loadingMoreRef.current = true;
+
+    try {
+      const data = await apiFetch<ChatResponse>(
+        `/api/chat/${groupId}?before=${encodeURIComponent(nextCursorRef.current)}`
+      );
+      const older = data.messages.map(dbToChat);
+      setMessages((prev) => [...older, ...prev]);
+      setHasMore(data.hasMore);
+      nextCursorRef.current = data.nextCursor;
+    } catch (e) {
+      console.error("追加メッセージの読み込み失敗:", e);
+    } finally {
+      loadingMoreRef.current = false;
+    }
+  }, [groupId, hasMore]);
 
   const sendMessage = useCallback(
     async (text: string) => {
@@ -89,11 +131,11 @@ export function useRealtimeChat(groupId: string | null) {
           body: JSON.stringify({ text: text.trim() }),
         });
       } catch (e) {
-        console.error("Failed to send message:", e);
+        console.error("メッセージ送信失敗:", e);
       }
     },
     [groupId]
   );
 
-  return { messages, loading, sendMessage };
+  return { messages, loading, hasMore, loadMore, sendMessage };
 }

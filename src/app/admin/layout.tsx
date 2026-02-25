@@ -15,29 +15,25 @@ const NAV_ITEMS = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [isAuthed, setIsAuthed] = useState(false);
-  const [checking, setChecking] = useState(true);
 
+  // 同期的cookie確認（useEffect不要で余分な再レンダリングを削減）
+  const [isAuthed] = useState(() => {
+    if (typeof document === "undefined") return false;
+    return document.cookie.includes("admin_token");
+  });
+
+  // リダイレクトの副作用のみ useEffect で処理
   useEffect(() => {
-    if (pathname === "/admin/login") {
-      setChecking(false);
-      return;
-    }
-
-    const token = document.cookie.includes("admin_token");
-    if (!token) {
+    if (pathname !== "/admin/login" && !isAuthed) {
       router.push("/admin/login");
-    } else {
-      setIsAuthed(true);
     }
-    setChecking(false);
-  }, [pathname, router]);
+  }, [pathname, isAuthed, router]);
 
   if (pathname === "/admin/login") {
     return <>{children}</>;
   }
 
-  if (checking || !isAuthed) {
+  if (!isAuthed) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="animate-spin w-8 h-8 border-3 border-orange border-t-transparent rounded-full" />

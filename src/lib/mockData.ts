@@ -1,4 +1,4 @@
-import { MatchMember, ChatMessage } from "@/types";
+import type { MatchMember, ChatMessage } from "@/types";
 
 export const MOCK_MEMBERS: MatchMember[] = [
   {

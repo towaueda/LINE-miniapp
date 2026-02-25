@@ -49,37 +49,6 @@ export interface Review {
 
 export type AreaOption = "umeda" | "yodoyabashi" | "honmachi" | "namba" | "tennoji";
 
-export const AREA_LABELS: Record<AreaOption, string> = {
-  umeda: "梅田",
-  yodoyabashi: "淀屋橋",
-  honmachi: "本町",
-  namba: "難波",
-  tennoji: "天王寺",
-};
-
-export const INDUSTRY_OPTIONS = [
-  { value: "it", label: "IT" },
-  { value: "finance", label: "金融" },
-  { value: "manufacturer", label: "メーカー" },
-  { value: "trading", label: "商社" },
-  { value: "service", label: "サービス" },
-  { value: "consulting", label: "コンサル" },
-  { value: "media", label: "広告・メディア" },
-  { value: "realestate", label: "不動産" },
-  { value: "medical", label: "医療" },
-  { value: "other", label: "その他" },
-];
-
-export const BIRTH_YEAR_OPTIONS: number[] = [];
-for (let y = 1990; y <= 2005; y++) {
-  BIRTH_YEAR_OPTIONS.push(y);
-}
-
-export const AGE_OPTIONS: number[] = [];
-for (let a = 20; a <= 45; a++) {
-  AGE_OPTIONS.push(a);
-}
-
 // --- DB Types ---
 
 export interface DbUser {

@@ -3,11 +3,37 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useLiff } from "@/components/LiffProvider";
-import { AREA_LABELS, AreaOption, INDUSTRY_OPTIONS, MatchGroup } from "@/types";
-import { MOCK_MEMBERS, MOCK_RESTAURANTS } from "@/lib/mockData";
+import type { AreaOption, MatchGroup } from "@/types";
+import { AREA_LABELS, INDUSTRY_LABEL_MAP } from "@/types/constants";
 import { apiFetch } from "@/lib/api";
 
 const MATCH_STORAGE_KEY = "triangle_match";
+
+interface ApiGroup {
+  id: string; area: string; date: string; time: string; restaurant_name: string; status: string;
+}
+interface ApiMember {
+  id: string; nickname: string; birth_year: number; industry: string; avatar_emoji: string; bio: string;
+}
+
+function toMatchGroup(group: ApiGroup, members: ApiMember[]): MatchGroup {
+  return {
+    id: group.id,
+    members: members.map((m) => ({
+      id: m.id,
+      nickname: m.nickname || "",
+      birthYear: m.birth_year || 0,
+      industry: m.industry || "",
+      avatarEmoji: m.avatar_emoji || "😊",
+      bio: m.bio || "",
+    })),
+    date: group.date,
+    time: group.time,
+    area: AREA_LABELS[group.area as AreaOption] || group.area,
+    restaurant: group.restaurant_name,
+    status: group.status as "pending" | "confirmed" | "completed",
+  };
+}
 
 function getNextThursdays(): { label: string; value: string }[] {
   const dates: { label: string; value: string }[] = [];
@@ -30,7 +56,7 @@ function getNextThursdays(): { label: string; value: string }[] {
 }
 
 function getIndustryLabel(value: string): string {
-  return INDUSTRY_OPTIONS.find((o) => o.value === value)?.label || value;
+  return INDUSTRY_LABEL_MAP.get(value) || value;
 }
 
 export default function MatchingPage() {
@@ -54,8 +80,8 @@ export default function MatchingPage() {
       const data = await apiFetch<{
         status: string;
         hasPendingReview?: boolean;
-        group?: { id: string; area: string; date: string; time: string; restaurant_name: string; status: string };
-        members?: { id: string; nickname: string; birth_year: number; industry: string; avatar_emoji: string; bio: string }[];
+        group?: ApiGroup;
+        members?: ApiMember[];
       }>("/api/matching/status");
 
       if (data.hasPendingReview) {
@@ -63,22 +89,7 @@ export default function MatchingPage() {
       }
 
       if (data.status === "matched" && data.group && data.members) {
-        const match: MatchGroup = {
-          id: data.group.id,
-          members: data.members.map((m) => ({
-            id: m.id,
-            nickname: m.nickname || "",
-            birthYear: m.birth_year || 0,
-            industry: m.industry || "",
-            avatarEmoji: m.avatar_emoji || "😊",
-            bio: m.bio || "",
-          })),
-          date: data.group.date,
-          time: data.group.time,
-          area: AREA_LABELS[data.group.area as AreaOption] || data.group.area,
-          restaurant: data.group.restaurant_name,
-          status: data.group.status as "pending" | "confirmed" | "completed",
-        };
+        const match = toMatchGroup(data.group, data.members);
         setMatchResult(match);
         localStorage.setItem(MATCH_STORAGE_KEY, JSON.stringify(match));
       } else if (data.status === "waiting") {
@@ -126,30 +137,15 @@ export default function MatchingPage() {
         const data = await apiFetch<{
           status: string;
           error?: string;
-          group?: { id: string; area: string; date: string; time: string; restaurant_name: string; status: string };
-          members?: { id: string; nickname: string; birth_year: number; industry: string; avatar_emoji: string; bio: string }[];
+          group?: ApiGroup;
+          members?: ApiMember[];
         }>("/api/matching/request", {
           method: "POST",
           body: JSON.stringify({ area: selectedArea, dates: selectedDates }),
         });
 
         if (data.status === "matched" && data.group && data.members) {
-          const match: MatchGroup = {
-            id: data.group.id,
-            members: data.members.map((m) => ({
-              id: m.id,
-              nickname: m.nickname || "",
-              birthYear: m.birth_year || 0,
-              industry: m.industry || "",
-              avatarEmoji: m.avatar_emoji || "😊",
-              bio: m.bio || "",
-            })),
-            date: data.group.date,
-            time: data.group.time,
-            area: AREA_LABELS[data.group.area as AreaOption] || data.group.area,
-            restaurant: data.group.restaurant_name,
-            status: data.group.status as "pending" | "confirmed" | "completed",
-          };
+          const match = toMatchGroup(data.group, data.members);
           setMatchResult(match);
           localStorage.setItem(MATCH_STORAGE_KEY, JSON.stringify(match));
         } else {
@@ -160,8 +156,9 @@ export default function MatchingPage() {
       }
       setIsSearching(false);
     } else {
-      // Mock mode
-      setTimeout(() => {
+      // Mock mode（mockDataを動的インポート）
+      setTimeout(async () => {
+        const { MOCK_MEMBERS, MOCK_RESTAURANTS } = await import("@/lib/mockData");
         const areaLabel = AREA_LABELS[selectedArea as AreaOption] || "梅田";
         const restaurant =
           MOCK_RESTAURANTS.find((r) => r.area === areaLabel) || MOCK_RESTAURANTS[0];
@@ -209,7 +206,7 @@ export default function MatchingPage() {
   return (
     <div className="px-4 py-6">
       {/* Pending Review Banner */}
-      {hasPendingReview && (
+      {hasPendingReview ? (
         <div className="bg-orange/10 border border-orange/30 rounded-xl p-4 mb-4">
           <p className="text-sm font-semibold text-orange mb-1">レビュー未完了</p>
           <p className="text-xs text-gray-600 mb-3">
@@ -222,7 +219,7 @@ export default function MatchingPage() {
             レビューページへ
           </button>
         </div>
-      )}
+      ) : null}
 
       {matchResult ? (
         <MatchResultView match={matchResult} userId={user!.id} onReset={() => {

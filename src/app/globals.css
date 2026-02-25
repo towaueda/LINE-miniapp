@@ -51,3 +51,9 @@ body {
 .stagger-children > *:nth-child(3) { animation-delay: 0.15s; }
 .stagger-children > *:nth-child(4) { animation-delay: 0.2s; }
 .stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
+
+/* Chat message performance: content-visibility for long lists */
+.chat-message {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 60px;
+}

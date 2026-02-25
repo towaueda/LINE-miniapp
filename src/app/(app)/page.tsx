@@ -103,9 +103,9 @@ export default function Home() {
             placeholder="招待コードを入力"
             className="w-full px-4 py-3 rounded-xl border-[1.5px] border-gray-200 text-sm outline-none transition-colors focus:border-orange bg-white text-center tracking-wider"
           />
-          {inviteError && (
+          {inviteError ? (
             <p className="text-xs text-red-500 mt-1.5 text-center">{inviteError}</p>
-          )}
+          ) : null}
         </div>
 
         {/* Login Button */}

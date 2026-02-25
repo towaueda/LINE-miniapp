@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { DbUser, AREA_LABELS, AreaOption } from "@/types";
+import type { DbUser, AreaOption } from "@/types";
+import { AREA_LABELS } from "@/types/constants";
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<DbUser[]>([]);

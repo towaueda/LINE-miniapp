@@ -7,6 +7,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  // 全クエリを単一のPromise.allで並列実行
   const [
     { count: totalUsers },
     { count: bannedUsers },
@@ -15,6 +16,9 @@ export async function GET(request: Request) {
     { count: totalReviews },
     { count: totalInvites },
     { count: usedInvites },
+    { data: reviewAvg },
+    { data: recentUsers },
+    { data: recentMatches },
   ] = await Promise.all([
     supabaseAdmin.from("users").select("*", { count: "exact", head: true }),
     supabaseAdmin.from("users").select("*", { count: "exact", head: true }).eq("is_banned", true),
@@ -23,34 +27,14 @@ export async function GET(request: Request) {
     supabaseAdmin.from("reviews").select("*", { count: "exact", head: true }),
     supabaseAdmin.from("invite_codes").select("*", { count: "exact", head: true }),
     supabaseAdmin.from("invite_codes").select("*", { count: "exact", head: true }).not("used_by", "is", null),
+    supabaseAdmin.rpc("review_averages").single() as unknown as Promise<{ data: { avg_communication: number; avg_punctuality: number; avg_meet_again: number } | null }>,
+    supabaseAdmin.from("users").select("id, nickname, created_at").order("created_at", { ascending: false }).limit(5),
+    supabaseAdmin.from("match_groups").select("id, area, date, status, created_at").order("created_at", { ascending: false }).limit(5),
   ]);
 
-  // Average review scores
-  const { data: reviewAvg } = await supabaseAdmin
-    .from("reviews")
-    .select("communication, punctuality, meet_again");
-
-  let avgCommunication = 0;
-  let avgPunctuality = 0;
-  let avgMeetAgain = 0;
-  if (reviewAvg && reviewAvg.length > 0) {
-    avgCommunication = reviewAvg.reduce((s, r) => s + r.communication, 0) / reviewAvg.length;
-    avgPunctuality = reviewAvg.reduce((s, r) => s + r.punctuality, 0) / reviewAvg.length;
-    avgMeetAgain = reviewAvg.reduce((s, r) => s + r.meet_again, 0) / reviewAvg.length;
-  }
-
-  // Recent activity
-  const { data: recentUsers } = await supabaseAdmin
-    .from("users")
-    .select("id, nickname, created_at")
-    .order("created_at", { ascending: false })
-    .limit(5);
-
-  const { data: recentMatches } = await supabaseAdmin
-    .from("match_groups")
-    .select("id, area, date, status, created_at")
-    .order("created_at", { ascending: false })
-    .limit(5);
+  const avgCommunication = reviewAvg?.avg_communication ?? 0;
+  const avgPunctuality = reviewAvg?.avg_punctuality ?? 0;
+  const avgMeetAgain = reviewAvg?.avg_meet_again ?? 0;
 
   return NextResponse.json({
     stats: {

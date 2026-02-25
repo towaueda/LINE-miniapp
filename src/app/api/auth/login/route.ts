@@ -34,17 +34,17 @@ export async function POST(request: Request) {
         .single();
 
       if (invite) {
-        // Mark invite as used
-        await supabaseAdmin
-          .from("invite_codes")
-          .update({ used_by: user.id, used_at: new Date().toISOString() })
-          .eq("id", invite.id);
-
-        // Approve user
-        await supabaseAdmin
-          .from("users")
-          .update({ is_approved: true, invited_by_code: inviteCode })
-          .eq("id", user.id);
+        // Mark invite as used + Approve user (parallel)
+        await Promise.all([
+          supabaseAdmin
+            .from("invite_codes")
+            .update({ used_by: user.id, used_at: new Date().toISOString() })
+            .eq("id", invite.id),
+          supabaseAdmin
+            .from("users")
+            .update({ is_approved: true, invited_by_code: inviteCode })
+            .eq("id", user.id),
+        ]);
 
         const updatedUser = { ...user, is_approved: true, invited_by_code: inviteCode };
         return NextResponse.json({ user: updatedUser });

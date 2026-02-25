@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useLiff } from "@/components/LiffProvider";
-import { MatchGroup, Review } from "@/types";
+import type { MatchGroup, Review } from "@/types";
 import { apiFetch } from "@/lib/api";
 
 const MATCH_KEY = "triangle_match";
 const REVIEW_DONE_KEY = "triangle_review_done";
+const STAR_VALUES = [1, 2, 3, 4, 5] as const;
 
 export default function ReviewPage() {
   const { user, isReady, isLiffMode, dbUser } = useLiff();
@@ -43,7 +44,14 @@ export default function ReviewPage() {
       return;
     }
 
-    const parsed: MatchGroup = JSON.parse(storedMatch);
+    let parsed: MatchGroup;
+    try {
+      parsed = JSON.parse(storedMatch);
+    } catch {
+      localStorage.removeItem(MATCH_KEY);
+      router.push("/matching");
+      return;
+    }
     setMatch(parsed);
 
     const others = parsed.members.filter((m) => m.id !== userId);
@@ -64,13 +72,13 @@ export default function ReviewPage() {
     [match]
   );
 
-  const updateReview = (idx: number, field: keyof Review, value: number | string) => {
+  const updateReview = useCallback((idx: number, field: keyof Review, value: number | string) => {
     setReviews((prev) => {
       const copy = [...prev];
       copy[idx] = { ...copy[idx], [field]: value };
       return copy;
     });
-  };
+  }, []);
 
   const allRated = reviews.every(
     (r) => r.communication > 0 && r.punctuality > 0 && r.meetAgain > 0
@@ -181,11 +189,11 @@ export default function ReviewPage() {
                 </span>
                 <div>
                   <span className="font-semibold">{review.targetName}</span>
-                  {member?.birthYear && member.birthYear > 0 && (
+                  {member?.birthYear != null && member.birthYear > 0 ? (
                     <span className="text-[11px] text-gray-400 ml-2">
                       {member.birthYear}年生
                     </span>
-                  )}
+                  ) : null}
                 </div>
               </div>
 
@@ -249,7 +257,7 @@ function StarRating({
     <div>
       <p className="text-xs text-gray-500 mb-1.5">{label}</p>
       <div className="flex gap-1">
-        {[1, 2, 3, 4, 5].map((star) => (
+        {STAR_VALUES.map((star) => (
           <button
             key={star}
             onClick={() => onChange(star)}

@@ -3,7 +3,8 @@
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useLiff } from "@/components/LiffProvider";
-import { AGE_OPTIONS, AREA_LABELS, AreaOption, INDUSTRY_OPTIONS } from "@/types";
+import type { AreaOption } from "@/types";
+import { AGE_OPTIONS, AREA_LABELS, INDUSTRY_OPTIONS } from "@/types/constants";
 import { apiFetch } from "@/lib/api";
 
 export default function ProfilePage() {

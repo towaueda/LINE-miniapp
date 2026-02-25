@@ -3,13 +3,17 @@ import { authenticateRequest } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
-  const user = await authenticateRequest(request);
+  // auth と body parsing を並列開始
+  const authPromise = authenticateRequest(request);
+  const bodyPromise = request.json();
+
+  const user = await authPromise;
   if (!user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   try {
-    const { groupId } = await request.json();
+    const { groupId } = await bodyPromise;
     if (!groupId) {
       return NextResponse.json({ error: "groupId required" }, { status: 400 });
     }

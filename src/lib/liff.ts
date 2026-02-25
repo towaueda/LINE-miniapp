@@ -3,25 +3,35 @@ import type Liff from "@line/liff";
 const LIFF_ID = process.env.NEXT_PUBLIC_LIFF_ID || "";
 
 let liff: typeof Liff | null = null;
+let initPromise: Promise<boolean> | null = null;
 
 export function getLiff() {
   return liff;
 }
 
-export async function initLiff(): Promise<boolean> {
+export function initLiff(): Promise<boolean> {
+  // Strict Mode 二重初期化ガード
+  if (initPromise) return initPromise;
+
   if (!LIFF_ID) {
     console.log("LIFF ID not set — running in mock mode");
-    return false;
+    initPromise = Promise.resolve(false);
+    return initPromise;
   }
-  try {
-    const mod = await import("@line/liff");
-    liff = mod.default;
-    await liff.init({ liffId: LIFF_ID });
-    return true;
-  } catch (e) {
-    console.error("LIFF init failed:", e);
-    return false;
-  }
+
+  initPromise = (async () => {
+    try {
+      const mod = await import("@line/liff");
+      liff = mod.default;
+      await liff.init({ liffId: LIFF_ID });
+      return true;
+    } catch (e) {
+      console.error("LIFF init failed:", e);
+      return false;
+    }
+  })();
+
+  return initPromise;
 }
 
 export function liffLogin() {

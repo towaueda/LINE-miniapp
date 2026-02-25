@@ -2,85 +2,116 @@ import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { tryMatch } from "@/lib/matching";
+import { isValidArea, validateDates } from "@/lib/validation";
 
 export async function POST(request: Request) {
-  const user = await authenticateRequest(request);
+  // auth と body parsing を並列開始
+  const authPromise = authenticateRequest(request);
+  const bodyPromise = request.json();
+
+  const user = await authPromise;
   if (!user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "認証が必要です" }, { status: 401 });
+  }
+
+  // 承認・BAN・プロフィール完成チェック
+  if (!user.is_approved) {
+    return NextResponse.json({ error: "アカウントが未承認です" }, { status: 403 });
+  }
+  if (user.is_banned) {
+    return NextResponse.json({ error: "アカウントが停止されています" }, { status: 403 });
+  }
+  if (!user.nickname || !user.area) {
+    return NextResponse.json({ error: "プロフィールを完成させてください" }, { status: 400 });
   }
 
   try {
-    const { area, dates } = await request.json();
+    const { area, dates } = await bodyPromise;
 
-    if (!area || !dates || !dates.length) {
-      return NextResponse.json({ error: "area and dates required" }, { status: 400 });
+    // エリアのバリデーション
+    if (!isValidArea(area)) {
+      return NextResponse.json({ error: "無効なエリアです" }, { status: 400 });
     }
 
-    // Check for pending reviews
-    const { data: memberGroups } = await supabaseAdmin
-      .from("match_group_members")
-      .select("group_id, match_groups(id, status)")
-      .eq("user_id", user.id);
+    // 日付のバリデーション
+    const dateResult = validateDates(dates);
+    if (!dateResult.valid) {
+      return NextResponse.json({ error: dateResult.reason }, { status: 400 });
+    }
+
+    // 期限切れリクエストを自動失効 + 未完了レビューの確認（並列）
+    const [, { data: memberGroups }] = await Promise.all([
+      supabaseAdmin.rpc("expire_old_match_requests"),
+      supabaseAdmin
+        .from("match_group_members")
+        .select("group_id, match_groups(id, status)")
+        .eq("user_id", user.id),
+    ]);
 
     if (memberGroups) {
-      for (const mg of memberGroups) {
-        const group = mg.match_groups as unknown as { id: string; status: string } | null;
-        if (group && group.status === "completed") {
-          // Check if user submitted reviews for this group
-          const { count } = await supabaseAdmin
-            .from("reviews")
-            .select("*", { count: "exact", head: true })
-            .eq("group_id", group.id)
-            .eq("reviewer_id", user.id);
+      const completedGroups = memberGroups
+        .map((mg) => mg.match_groups as unknown as { id: string; status: string } | null)
+        .filter((g): g is { id: string; status: string } => g !== null && g.status === "completed");
 
-          if (count === 0) {
-            return NextResponse.json({
-              error: "レビュー未完了のマッチングがあります",
-              hasPendingReview: true,
-            }, { status: 400 });
-          }
+      if (completedGroups.length > 0) {
+        const reviewCounts = await Promise.all(
+          completedGroups.map((g) =>
+            supabaseAdmin
+              .from("reviews")
+              .select("*", { count: "exact", head: true })
+              .eq("group_id", g.id)
+              .eq("reviewer_id", user.id)
+          )
+        );
+
+        if (reviewCounts.some((r) => r.count === 0)) {
+          return NextResponse.json({
+            error: "レビュー未完了のマッチングがあります",
+            hasPendingReview: true,
+          }, { status: 400 });
         }
       }
     }
 
-    // Cancel any existing waiting request
-    await supabaseAdmin
+    // 既存の待機中リクエストをキャンセル（レスポンスをブロックしない）
+    supabaseAdmin
       .from("match_requests")
       .update({ status: "cancelled" })
       .eq("user_id", user.id)
-      .eq("status", "waiting");
+      .eq("status", "waiting")
+      .then(() => {}, console.error);
 
-    // Create new request
+    // 新規リクエスト作成
     const { data: matchReq, error } = await supabaseAdmin
       .from("match_requests")
       .insert({
         user_id: user.id,
         area,
-        available_dates: dates,
+        available_dates: dateResult.dates,
         status: "waiting",
       })
       .select()
       .single();
 
     if (error) {
-      return NextResponse.json({ error: "Failed to create request" }, { status: 500 });
+      return NextResponse.json({ error: "リクエストの作成に失敗しました" }, { status: 500 });
     }
 
-    // Try to match immediately
+    // 即時マッチング試行（アトミックRPC）
     const groupId = await tryMatch(matchReq.id);
 
     if (groupId) {
-      // Match found! Return the group
-      const { data: group } = await supabaseAdmin
-        .from("match_groups")
-        .select("*")
-        .eq("id", groupId)
-        .single();
-
-      const { data: members } = await supabaseAdmin
-        .from("match_group_members")
-        .select("user_id, users(id, nickname, birth_year, industry, avatar_emoji, bio)")
-        .eq("group_id", groupId);
+      const [{ data: group }, { data: members }] = await Promise.all([
+        supabaseAdmin
+          .from("match_groups")
+          .select("*")
+          .eq("id", groupId)
+          .single(),
+        supabaseAdmin
+          .from("match_group_members")
+          .select("user_id, users(id, nickname, birth_year, industry, avatar_emoji, bio)")
+          .eq("group_id", groupId),
+      ]);
 
       return NextResponse.json({
         status: "matched",
@@ -94,6 +125,6 @@ export async function POST(request: Request) {
       request: matchReq,
     });
   } catch {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    return NextResponse.json({ error: "サーバーエラーが発生しました" }, { status: 500 });
   }
 }

@@ -9,59 +9,59 @@ export async function GET(request: Request) {
   }
 
   try {
-    // Check for pending reviews
+    // 2つの独立クエリを並列実行（memberGroups で memberships も兼ねる）
+    const [{ data: memberGroups }, { data: activeReq }] = await Promise.all([
+      supabaseAdmin
+        .from("match_group_members")
+        .select("group_id, match_groups(id, status)")
+        .eq("user_id", user.id),
+      supabaseAdmin
+        .from("match_requests")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("status", "waiting")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single(),
+    ]);
+
+    // memberGroups から completed と active を同時に分類（1ループ）
     let hasPendingReview = false;
-    const { data: memberGroups } = await supabaseAdmin
-      .from("match_group_members")
-      .select("group_id, match_groups(id, status)")
-      .eq("user_id", user.id);
+    const activeGroupIds: string[] = [];
 
     if (memberGroups) {
+      const completedGroupIds: string[] = [];
       for (const mg of memberGroups) {
-        const group = mg.match_groups as unknown as { id: string; status: string } | null;
-        if (group && group.status === "completed") {
-          const { count } = await supabaseAdmin
-            .from("reviews")
-            .select("*", { count: "exact", head: true })
-            .eq("group_id", group.id)
-            .eq("reviewer_id", user.id);
+        const g = mg.match_groups as unknown as { id: string; status: string } | null;
+        if (!g) continue;
+        if (g.status === "completed") completedGroupIds.push(g.id);
+        if (g.status === "pending" || g.status === "confirmed") activeGroupIds.push(g.id);
+      }
 
-          if (count === 0) {
-            hasPendingReview = true;
-            break;
-          }
-        }
+      if (completedGroupIds.length > 0) {
+        const reviewCounts = await Promise.all(
+          completedGroupIds.map((id) =>
+            supabaseAdmin
+              .from("reviews")
+              .select("*", { count: "exact", head: true })
+              .eq("group_id", id)
+              .eq("reviewer_id", user.id)
+          )
+        );
+        hasPendingReview = reviewCounts.some((r) => r.count === 0);
       }
     }
-
-    // Check for active match request
-    const { data: activeReq } = await supabaseAdmin
-      .from("match_requests")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("status", "waiting")
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .single();
 
     if (activeReq) {
       return NextResponse.json({ status: "waiting", request: activeReq, hasPendingReview });
     }
 
-    // Check for active match group
-    const { data: memberships } = await supabaseAdmin
-      .from("match_group_members")
-      .select("group_id")
-      .eq("user_id", user.id);
-
-    if (memberships && memberships.length > 0) {
-      const groupIds = memberships.map((m) => m.group_id);
-
+    if (activeGroupIds.length > 0) {
+      // 最新の active group を取得 + メンバー情報を並列取得
       const { data: activeGroup } = await supabaseAdmin
         .from("match_groups")
         .select("*")
-        .in("id", groupIds)
-        .in("status", ["pending", "confirmed"])
+        .in("id", activeGroupIds)
         .order("created_at", { ascending: false })
         .limit(1)
         .single();

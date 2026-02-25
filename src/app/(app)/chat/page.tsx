@@ -3,13 +3,18 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useLiff } from "@/components/LiffProvider";
-import { ChatMessage, MatchGroup } from "@/types";
-import { generateMockChat } from "@/lib/mockData";
+import type { ChatMessage, MatchGroup } from "@/types";
 import { useRealtimeChat } from "@/hooks/useRealtimeChat";
 import { apiFetch } from "@/lib/api";
 
 const MATCH_KEY = "triangle_match";
 const CHAT_KEY = "triangle_chat";
+
+const SendIcon = (
+  <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
+    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor" />
+  </svg>
+);
 
 const MOCK_REPLIES = [
   "いいですね！👍",
@@ -46,8 +51,7 @@ export default function ChatPage() {
   const [input, setInput] = useState("");
   const [match, setMatch] = useState<MatchGroup | null>(null);
   const [noMatch, setNoMatch] = useState(false);
-  const [expired, setExpired] = useState(false);
-  const [remainingTime, setRemainingTime] = useState("");
+  const [tick, setTick] = useState(0); // タイマー再レンダリング用
   const bottomRef = useRef<HTMLDivElement>(null);
   const isFirstRender = useRef(true);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
@@ -78,40 +82,46 @@ export default function ChatPage() {
       return;
     }
     setNoMatch(false);
-    const parsed: MatchGroup = JSON.parse(storedMatch);
-    setMatch(parsed);
-
-    // Check expiry
-    if (isChatExpired(parsed.date)) {
-      setExpired(true);
+    try {
+      const parsed: MatchGroup = JSON.parse(storedMatch);
+      setMatch(parsed);
+    } catch {
+      localStorage.removeItem(MATCH_KEY);
+      setNoMatch(true);
+      return;
     }
-    setRemainingTime(getRemainingTime(parsed.date));
 
     if (!useApi) {
       const storedChat = localStorage.getItem(CHAT_KEY);
       if (storedChat) {
-        setMockMessages(JSON.parse(storedChat));
-      } else {
-        const initial = generateMockChat();
-        setMockMessages(initial);
-        localStorage.setItem(CHAT_KEY, JSON.stringify(initial));
+        try {
+          setMockMessages(JSON.parse(storedChat));
+        } catch {
+          localStorage.removeItem(CHAT_KEY);
+        }
+      }
+      if (!storedChat) {
+        // mockData を動的インポート
+        import("@/lib/mockData").then(({ generateMockChat }) => {
+          const initial = generateMockChat();
+          setMockMessages(initial);
+          localStorage.setItem(CHAT_KEY, JSON.stringify(initial));
+        });
       }
     }
   }, [isReady, userLoggedIn, router, useApi]);
 
-  // Update remaining time every minute
+  // 1分ごとに再レンダリングして残り時間を更新
   useEffect(() => {
     if (!match) return;
-    const interval = setInterval(() => {
-      if (isChatExpired(match.date)) {
-        setExpired(true);
-        setRemainingTime("終了");
-      } else {
-        setRemainingTime(getRemainingTime(match.date));
-      }
-    }, 60000);
+    const interval = setInterval(() => setTick((t) => t + 1), 60000);
     return () => clearInterval(interval);
   }, [match]);
+
+  // レンダリング中に導出（state不要）
+  const expired = match ? isChatExpired(match.date) : false;
+  const remainingTime = match ? getRemainingTime(match.date) : "";
+  void tick; // tick 変更で再レンダリングされる
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({
@@ -149,7 +159,7 @@ export default function ChatPage() {
     };
   }, [match, userId]);
 
-  const sendMessage = async () => {
+  const sendMessage = useCallback(async () => {
     if (!input.trim() || !userId || !userNickname || expired) return;
 
     if (useApi) {
@@ -166,9 +176,11 @@ export default function ChatPage() {
           minute: "2-digit",
         }),
       };
-      const updated = [...mockMessages, newMsg];
-      setMockMessages(updated);
-      saveChat(updated);
+      setMockMessages((prev) => {
+        const updated = [...prev, newMsg];
+        saveChat(updated);
+        return updated;
+      });
       setInput("");
 
       setTimeout(() => {
@@ -189,7 +201,7 @@ export default function ChatPage() {
         });
       }, 1500);
     }
-  };
+  }, [input, userId, userNickname, expired, useApi, realtimeSend, saveChat]);
 
   const handleComplete = async () => {
     if (useApi && match) {
@@ -247,7 +259,7 @@ export default function ChatPage() {
       </div>
 
       {/* Expired Banner */}
-      {expired && (
+      {expired ? (
         <div className="bg-orange/10 border-b border-orange/20 px-4 py-3 flex items-center justify-between shrink-0">
           <p className="text-xs text-orange font-medium">チャット期間が終了しました</p>
           <button
@@ -257,14 +269,14 @@ export default function ChatPage() {
             レビューへ
           </button>
         </div>
-      )}
+      ) : null}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 bg-gray-50">
         {messages.map((msg) => {
           if (msg.isSystem) {
             return (
-              <div key={msg.id} className="text-center">
+              <div key={msg.id} className="text-center chat-message">
                 <span className="text-[11px] text-gray-400 bg-white px-3 py-1.5 rounded-full inline-block shadow-sm">
                   {msg.text}
                 </span>
@@ -276,7 +288,7 @@ export default function ChatPage() {
           return (
             <div
               key={msg.id}
-              className={`flex ${isMe ? "justify-end" : "justify-start"} gap-2`}
+              className={`flex ${isMe ? "justify-end" : "justify-start"} gap-2 chat-message`}
             >
               {!isMe && (
                 <div className="shrink-0">
@@ -315,7 +327,7 @@ export default function ChatPage() {
       </div>
 
       {/* Lunch Complete Button */}
-      {!expired && (
+      {!expired ? (
         <div className="bg-white border-t border-gray-100 px-4 py-2 shrink-0">
           <button
             onClick={handleComplete}
@@ -324,7 +336,7 @@ export default function ChatPage() {
             ランチ完了 → レビューへ
           </button>
         </div>
-      )}
+      ) : null}
 
       {/* Input */}
       <div className="bg-white border-t border-gray-100 px-3 py-2 flex gap-2 items-end shrink-0">
@@ -347,9 +359,7 @@ export default function ChatPage() {
               disabled={!input.trim()}
               className="bg-line hover:bg-line-dark disabled:bg-gray-200 text-white w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-colors"
             >
-              <svg width="18" height="18" fill="none" viewBox="0 0 24 24">
-                <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="currentColor" />
-              </svg>
+              {SendIcon}
             </button>
           </>
         )}

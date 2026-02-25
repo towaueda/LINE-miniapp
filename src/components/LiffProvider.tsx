@@ -1,9 +1,9 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from "react";
-import { UserProfile, DbUser } from "@/types";
+import type { UserProfile, DbUser } from "@/types";
 import { initLiff, getLiffProfile, liffLogin, getLiff } from "@/lib/liff";
-import { getRandomEmoji } from "@/lib/mockData";
+import { getRandomEmoji } from "@/lib/emoji";
 
 interface LiffContextType {
   isReady: boolean;

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AREA_LABELS, AreaOption } from "@/types";
+import type { AreaOption } from "@/types";
+import { AREA_LABELS } from "@/types/constants";
 
 interface Stats {
   totalUsers: number;
