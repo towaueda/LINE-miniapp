@@ -1,6 +1,6 @@
 import type Liff from "@line/liff";
 
-const LIFF_ID = process.env.NEXT_PUBLIC_LIFF_ID || "";
+const LIFF_ID = (process.env.NEXT_PUBLIC_LIFF_ID || "").trim();
 
 let liff: typeof Liff | null = null;
 let initPromise: Promise<boolean> | null = null;
