@@ -87,25 +87,34 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
             setUserState(liffUser);
             saveUser(liffUser);
 
-            // Login to backend with invite code if present
-            try {
-              const accessToken = liffInstance.getAccessToken();
+            // Login to backend with invite code if present (retry up to 3 times)
+            const accessToken = liffInstance.getAccessToken();
+            if (accessToken) {
               const inviteCode = sessionStorage.getItem("triangle_invite_code");
-              if (accessToken) {
-                const res = await fetch("/api/auth/login", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({ accessToken, inviteCode: inviteCode || undefined }),
-                });
-                if (res.ok) {
-                  const data = await res.json();
-                  setDbUserState(data.user);
-                  // Clear used invite code
-                  sessionStorage.removeItem("triangle_invite_code");
+              const MAX_RETRIES = 3;
+              for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+                try {
+                  const res = await fetch("/api/auth/login", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ accessToken, inviteCode: inviteCode || undefined }),
+                  });
+                  if (res.ok) {
+                    const data = await res.json();
+                    setDbUserState(data.user);
+                    sessionStorage.removeItem("triangle_invite_code");
+                    break;
+                  }
+                  // 4xx はリトライしても無駄なので打ち切り
+                  if (res.status >= 400 && res.status < 500) break;
+                } catch (e) {
+                  console.error(`Backend login attempt ${attempt + 1} failed:`, e);
+                }
+                // 次のリトライまで待機（指数バックオフ: 1s, 2s）
+                if (attempt < MAX_RETRIES - 1) {
+                  await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
                 }
               }
-            } catch (e) {
-              console.error("Backend login failed:", e);
             }
           }
         }
