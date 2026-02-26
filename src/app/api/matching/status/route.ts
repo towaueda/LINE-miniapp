@@ -57,25 +57,24 @@ export async function GET(request: Request) {
     }
 
     if (activeGroupIds.length > 0) {
-      // 最新の active group を取得 + メンバー情報を並列取得
+      // グループ + メンバー情報を1クエリで取得（直列ウォーターフォール排除）
       const { data: activeGroup } = await supabaseAdmin
         .from("match_groups")
-        .select("*")
+        .select("*, match_group_members(user_id, users(id, nickname, birth_year, industry, avatar_emoji, bio))")
         .in("id", activeGroupIds)
         .order("created_at", { ascending: false })
         .limit(1)
         .single();
 
       if (activeGroup) {
-        const { data: members } = await supabaseAdmin
-          .from("match_group_members")
-          .select("user_id, users(id, nickname, birth_year, industry, avatar_emoji, bio)")
-          .eq("group_id", activeGroup.id);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { match_group_members, ...group } = activeGroup as any;
+        const members = match_group_members?.map((m: { users: unknown }) => m.users);
 
         return NextResponse.json({
           status: "matched",
-          group: activeGroup,
-          members: members?.map((m) => m.users),
+          group,
+          members,
           hasPendingReview,
         });
       }

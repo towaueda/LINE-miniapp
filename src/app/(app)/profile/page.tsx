@@ -7,12 +7,13 @@ import type { AreaOption } from "@/types";
 import { AGE_OPTIONS, AREA_LABELS, INDUSTRY_OPTIONS } from "@/types/constants";
 import { apiFetch } from "@/lib/api";
 
+const currentYear = new Date().getFullYear();
+
 export default function ProfilePage() {
   const { user, setUser, dbUser, setDbUser, isLiffMode } = useLiff();
   const router = useRouter();
 
   const [nickname, setNickname] = useState("");
-  const currentYear = new Date().getFullYear();
   const [birthYear, setBirthYear] = useState<number>(currentYear - 25);
   const [area, setArea] = useState<string>("");
   const [industry, setIndustry] = useState<string>("");

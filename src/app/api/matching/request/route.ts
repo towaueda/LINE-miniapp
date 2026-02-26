@@ -101,23 +101,19 @@ export async function POST(request: Request) {
     const groupId = await tryMatch(matchReq.id);
 
     if (groupId) {
-      const [{ data: group }, { data: members }] = await Promise.all([
-        supabaseAdmin
-          .from("match_groups")
-          .select("*")
-          .eq("id", groupId)
-          .single(),
-        supabaseAdmin
-          .from("match_group_members")
-          .select("user_id, users(id, nickname, birth_year, industry, avatar_emoji, bio)")
-          .eq("group_id", groupId),
-      ]);
+      // グループ + メンバー情報を1クエリで取得（2 DB round trips → 1）
+      const { data: groupWithMembers } = await supabaseAdmin
+        .from("match_groups")
+        .select("*, match_group_members(user_id, users(id, nickname, birth_year, industry, avatar_emoji, bio))")
+        .eq("id", groupId)
+        .single();
 
-      return NextResponse.json({
-        status: "matched",
-        group,
-        members: members?.map((m) => m.users),
-      });
+      if (groupWithMembers) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { match_group_members, ...group } = groupWithMembers as any;
+        const members = match_group_members?.map((m: { users: unknown }) => m.users);
+        return NextResponse.json({ status: "matched", group, members });
+      }
     }
 
     return NextResponse.json({
