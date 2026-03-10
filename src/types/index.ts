@@ -97,6 +97,7 @@ export interface DbMatchGroupMember {
   group_id: string;
   user_id: string;
   joined_at: string;
+  completed_at: string | null;
 }
 
 export interface DbMessage {

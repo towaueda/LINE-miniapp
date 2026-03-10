@@ -46,6 +46,7 @@ export default function ChatPage() {
   const [tick, setTick] = useState(0); // タイマー再レンダリング用
   const bottomRef = useRef<HTMLDivElement>(null);
   const isFirstRender = useRef(true);
+  const [restaurantName, setRestaurantName] = useState("未定");
 
   const userLoggedIn = user?.isLoggedIn;
   const userId = user?.id;
@@ -73,6 +74,7 @@ export default function ChatPage() {
     try {
       const parsed: MatchGroup = JSON.parse(storedMatch);
       setMatch(parsed);
+      setRestaurantName(parsed.restaurant || "未定");
     } catch {
       localStorage.removeItem(MATCH_KEY);
       setNoMatch(true);
@@ -113,9 +115,9 @@ export default function ChatPage() {
         .filter((m) => m.id !== userId)
         .map((m) => m.nickname)
         .join("・"),
-      detail: `📍 ${match.restaurant} ・ ${match.date} ${match.time}`,
+      detail: `📍 ${restaurantName} ・ ${match.date} ${match.time}`,
     };
-  }, [match, userId]);
+  }, [match, userId, restaurantName]);
 
   const sendMessage = useCallback(async () => {
     if (!input.trim() || !userId || !userNickname || expired) return;
@@ -177,6 +179,13 @@ export default function ChatPage() {
           {expired ? "終了" : remainingTime}
         </span>
       </div>
+
+      {/* Restaurant Banner - お店が未定の場合 */}
+      {restaurantName === "未定" && !expired ? (
+        <div className="bg-blue-50 border-b border-blue-100 px-4 py-2.5 shrink-0">
+          <p className="text-xs text-blue-600 font-medium">📍 お店がまだ決まっていません。チャットで相談しましょう！</p>
+        </div>
+      ) : null}
 
       {/* Expired Banner */}
       {expired ? (

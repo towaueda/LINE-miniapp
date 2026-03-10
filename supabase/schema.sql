@@ -72,6 +72,7 @@ CREATE TABLE match_group_members (
   group_id UUID NOT NULL REFERENCES match_groups(id) ON DELETE CASCADE,
   user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   joined_at TIMESTAMPTZ DEFAULT NOW(),
+  completed_at TIMESTAMPTZ,
   UNIQUE(group_id, user_id)
 );
 
@@ -360,24 +361,17 @@ BEGIN
 
     -- === マッチ成立！単一トランザクション内でグループ作成 ===
 
-    -- エリアのレストランをランダム選択
-    SELECT * INTO v_rest
-    FROM restaurants
-    WHERE area = v_req.area
-    ORDER BY random()
-    LIMIT 1;
-
     v_gid := uuid_generate_v4();
 
-    -- グループ作成
+    -- グループ作成（レストランはユーザーがチャットで決定）
     INSERT INTO match_groups (id, area, date, time, restaurant_id, restaurant_name, status)
     VALUES (
       v_gid,
       v_req.area,
       v_date,
       '12:00',
-      v_rest.id,
-      COALESCE(v_rest.name, '未定'),
+      NULL,
+      '未定',
       'confirmed'
     );
 
