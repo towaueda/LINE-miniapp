@@ -21,7 +21,7 @@ export async function POST(request: Request) {
   if (user.is_banned) {
     return NextResponse.json({ error: "アカウントが停止されています" }, { status: 403 });
   }
-  if (!user.nickname || !user.area) {
+  if (!user.nickname || !user.area || !user.industry) {
     return NextResponse.json({ error: "プロフィールを完成させてください" }, { status: 400 });
   }
 

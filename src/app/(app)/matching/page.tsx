@@ -72,6 +72,7 @@ export default function MatchingPage() {
 
   const userLoggedIn = user?.isLoggedIn;
   const userArea = user?.area;
+  const isProfileComplete = !!(user?.nickname && user?.area && user?.industry);
 
   // Check existing match status on mount
   const checkStatus = useCallback(async () => {
@@ -205,6 +206,22 @@ export default function MatchingPage() {
 
   return (
     <div className="px-4 py-6">
+      {/* Profile Incomplete Banner */}
+      {!isProfileComplete ? (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+          <p className="text-sm font-semibold text-red-600 mb-1">プロフィール未完成</p>
+          <p className="text-xs text-gray-600 mb-3">
+            ニックネーム・エリア・業種を設定してからマッチングをリクエストしてください。
+          </p>
+          <button
+            onClick={() => router.push("/profile")}
+            className="bg-red-500 text-white text-xs font-bold py-2 px-4 rounded-lg"
+          >
+            プロフィールを設定する
+          </button>
+        </div>
+      ) : null}
+
       {/* Pending Review Banner */}
       {hasPendingReview ? (
         <div className="bg-orange/10 border border-orange/30 rounded-xl p-4 mb-4">
@@ -246,7 +263,7 @@ export default function MatchingPage() {
                 <button
                   key={d.value}
                   onClick={() => toggleDate(d.value)}
-                  disabled={hasPendingReview}
+                  disabled={!isProfileComplete || hasPendingReview}
                   className={`py-2.5 rounded-lg text-xs font-medium transition-all border ${
                     selectedDates.includes(d.value)
                       ? "bg-orange text-white border-orange"
@@ -269,7 +286,7 @@ export default function MatchingPage() {
                   <button
                     key={key}
                     onClick={() => setSelectedArea(key)}
-                    disabled={hasPendingReview}
+                    disabled={!isProfileComplete || hasPendingReview}
                     className={`py-2.5 rounded-lg text-sm font-medium transition-all border ${
                       selectedArea === key
                         ? "bg-orange text-white border-orange"
@@ -286,7 +303,7 @@ export default function MatchingPage() {
           {/* Search Button */}
           <button
             onClick={handleSearch}
-            disabled={!selectedDates.length || !selectedArea || isSearching || hasPendingReview}
+            disabled={!isProfileComplete || !selectedDates.length || !selectedArea || isSearching || hasPendingReview}
             className="w-full bg-line hover:bg-line-dark disabled:bg-gray-200 disabled:text-gray-400 text-white font-bold py-3.5 rounded-xl transition-all active:scale-[0.98]"
           >
             {isSearching ? (
