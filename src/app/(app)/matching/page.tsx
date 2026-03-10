@@ -94,7 +94,10 @@ export default function MatchingPage() {
         setMatchResult(match);
         localStorage.setItem(MATCH_STORAGE_KEY, JSON.stringify(match));
       } else if (data.status === "waiting") {
+        localStorage.removeItem(MATCH_STORAGE_KEY);
         setIsWaiting(true);
+      } else {
+        localStorage.removeItem(MATCH_STORAGE_KEY);
       }
     } catch (e) {
       console.error("Failed to check status:", e);
@@ -112,13 +115,6 @@ export default function MatchingPage() {
 
     if (isLiffMode && dbUser) {
       checkStatus();
-    } else {
-      const stored = localStorage.getItem(MATCH_STORAGE_KEY);
-      if (stored) {
-        try {
-          setMatchResult(JSON.parse(stored));
-        } catch { /* ignore */ }
-      }
     }
   }, [isReady, userLoggedIn, userArea, router, isLiffMode, dbUser, checkStatus]);
 
@@ -132,63 +128,28 @@ export default function MatchingPage() {
     if (!selectedDates.length || !selectedArea || !user) return;
     setIsSearching(true);
 
-    if (isLiffMode && dbUser) {
-      // API-based matching
-      try {
-        const data = await apiFetch<{
-          status: string;
-          error?: string;
-          group?: ApiGroup;
-          members?: ApiMember[];
-        }>("/api/matching/request", {
-          method: "POST",
-          body: JSON.stringify({ area: selectedArea, dates: selectedDates }),
-        });
+    try {
+      const data = await apiFetch<{
+        status: string;
+        error?: string;
+        group?: ApiGroup;
+        members?: ApiMember[];
+      }>("/api/matching/request", {
+        method: "POST",
+        body: JSON.stringify({ area: selectedArea, dates: selectedDates }),
+      });
 
-        if (data.status === "matched" && data.group && data.members) {
-          const match = toMatchGroup(data.group, data.members);
-          setMatchResult(match);
-          localStorage.setItem(MATCH_STORAGE_KEY, JSON.stringify(match));
-        } else {
-          setIsWaiting(true);
-        }
-      } catch (e) {
-        console.error("Matching request failed:", e);
-      }
-      setIsSearching(false);
-    } else {
-      // Mock mode（mockDataを動的インポート）
-      setTimeout(async () => {
-        const { MOCK_MEMBERS, MOCK_RESTAURANTS } = await import("@/lib/mockData");
-        const areaLabel = AREA_LABELS[selectedArea as AreaOption] || "梅田";
-        const restaurant =
-          MOCK_RESTAURANTS.find((r) => r.area === areaLabel) || MOCK_RESTAURANTS[0];
-
-        const match: MatchGroup = {
-          id: "match_1",
-          members: [
-            {
-              id: user.id,
-              nickname: user.nickname,
-              birthYear: user.birthYear,
-              industry: user.industry,
-              avatarEmoji: user.avatarEmoji,
-              bio: user.bio,
-            },
-            ...MOCK_MEMBERS,
-          ],
-          date: selectedDates[0],
-          time: "12:00",
-          area: areaLabel,
-          restaurant: restaurant.name,
-          status: "confirmed",
-        };
-
+      if (data.status === "matched" && data.group && data.members) {
+        const match = toMatchGroup(data.group, data.members);
         setMatchResult(match);
         localStorage.setItem(MATCH_STORAGE_KEY, JSON.stringify(match));
-        setIsSearching(false);
-      }, 2000);
+      } else {
+        setIsWaiting(true);
+      }
+    } catch (e) {
+      console.error("Matching request failed:", e);
     }
+    setIsSearching(false);
   };
 
   const handleCancel = async () => {

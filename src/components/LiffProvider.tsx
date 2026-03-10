@@ -135,21 +135,8 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
   const login = useCallback(() => {
     if (isLiffMode) {
       liffLogin();
-    } else {
-      const mockUser: UserProfile = {
-        id: "demo_user_1",
-        nickname: "",
-        birthYear: 2000,
-        area: "",
-        industry: "",
-        company: "",
-        bio: "",
-        avatarEmoji: getRandomEmoji(),
-        isLoggedIn: true,
-      };
-      setUser(mockUser);
     }
-  }, [isLiffMode, setUser]);
+  }, [isLiffMode]);
 
   const logout = useCallback(() => {
     setUser(null);

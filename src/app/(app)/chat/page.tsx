@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useLiff } from "@/components/LiffProvider";
-import type { ChatMessage, MatchGroup } from "@/types";
+import type { MatchGroup } from "@/types";
 import { useRealtimeChat } from "@/hooks/useRealtimeChat";
 import { apiFetch } from "@/lib/api";
 
@@ -16,13 +16,6 @@ const SendIcon = (
   </svg>
 );
 
-const MOCK_REPLIES = [
-  "いいですね！👍",
-  "了解です！",
-  "楽しみ〜！",
-  "OK！",
-  "それいいですね！😊",
-];
 
 function getChatDeadline(matchDate: string): Date {
   const deadline = new Date(matchDate + "T23:59:00");
@@ -45,28 +38,23 @@ function getRemainingTime(matchDate: string): string {
 }
 
 export default function ChatPage() {
-  const { user, isReady, isLiffMode, dbUser } = useLiff();
+  const { user, isReady, dbUser } = useLiff();
   const router = useRouter();
-  const [mockMessages, setMockMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [match, setMatch] = useState<MatchGroup | null>(null);
   const [noMatch, setNoMatch] = useState(false);
   const [tick, setTick] = useState(0); // タイマー再レンダリング用
   const bottomRef = useRef<HTMLDivElement>(null);
   const isFirstRender = useRef(true);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   const userLoggedIn = user?.isLoggedIn;
   const userId = user?.id;
   const userNickname = user?.nickname;
   const hasProfile = !!user?.nickname;
 
-  const useApi = isLiffMode && !!dbUser;
-  const groupId = useApi ? match?.id || null : null;
+  const groupId = match?.id || null;
 
-  const { messages: realtimeMessages, sendMessage: realtimeSend } = useRealtimeChat(groupId);
-
-  const messages = useApi ? realtimeMessages : mockMessages;
+  const { messages, sendMessage: realtimeSend } = useRealtimeChat(groupId);
 
   useEffect(() => {
     if (!isReady) return;
@@ -91,25 +79,8 @@ export default function ChatPage() {
       return;
     }
 
-    if (!useApi) {
-      const storedChat = localStorage.getItem(CHAT_KEY);
-      if (storedChat) {
-        try {
-          setMockMessages(JSON.parse(storedChat));
-        } catch {
-          localStorage.removeItem(CHAT_KEY);
-        }
-      }
-      if (!storedChat) {
-        // mockData を動的インポート
-        import("@/lib/mockData").then(({ generateMockChat }) => {
-          const initial = generateMockChat();
-          setMockMessages(initial);
-          localStorage.setItem(CHAT_KEY, JSON.stringify(initial));
-        });
-      }
-    }
-  }, [isReady, userLoggedIn, router, useApi]);
+    localStorage.removeItem(CHAT_KEY);
+  }, [isReady, userLoggedIn, router]);
 
   // 1分ごとに再レンダリングして残り時間を更新
   useEffect(() => {
@@ -130,19 +101,6 @@ export default function ChatPage() {
     isFirstRender.current = false;
   }, [messages]);
 
-  const saveChat = useCallback((msgs: ChatMessage[]) => {
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      localStorage.setItem(CHAT_KEY, JSON.stringify(msgs));
-    }, 500);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    };
-  }, []);
-
   const memberMap = useMemo(
     () => (match ? new Map(match.members.map((m) => [m.id, m])) : new Map()),
     [match]
@@ -161,50 +119,12 @@ export default function ChatPage() {
 
   const sendMessage = useCallback(async () => {
     if (!input.trim() || !userId || !userNickname || expired) return;
-
-    if (useApi) {
-      await realtimeSend(input.trim());
-      setInput("");
-    } else {
-      const newMsg: ChatMessage = {
-        id: `msg_user_${Date.now()}`,
-        senderId: userId,
-        senderName: userNickname,
-        text: input.trim(),
-        timestamp: new Date().toLocaleTimeString("ja-JP", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
-      };
-      setMockMessages((prev) => {
-        const updated = [...prev, newMsg];
-        saveChat(updated);
-        return updated;
-      });
-      setInput("");
-
-      setTimeout(() => {
-        const mockReply: ChatMessage = {
-          id: `msg_mock_${Date.now()}`,
-          senderId: "user_2",
-          senderName: "ゆうき",
-          text: MOCK_REPLIES[Math.floor(Math.random() * MOCK_REPLIES.length)],
-          timestamp: new Date().toLocaleTimeString("ja-JP", {
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        };
-        setMockMessages((prev) => {
-          const withReply = [...prev, mockReply];
-          saveChat(withReply);
-          return withReply;
-        });
-      }, 1500);
-    }
-  }, [input, userId, userNickname, expired, useApi, realtimeSend, saveChat]);
+    await realtimeSend(input.trim());
+    setInput("");
+  }, [input, userId, userNickname, expired, realtimeSend]);
 
   const handleComplete = async () => {
-    if (useApi && match) {
+    if (match) {
       try {
         await apiFetch("/api/matching/complete", {
           method: "POST",
@@ -284,7 +204,7 @@ export default function ChatPage() {
             );
           }
 
-          const isMe = msg.senderId === userId || (useApi && msg.senderId === dbUser?.id);
+          const isMe = msg.senderId === userId || msg.senderId === dbUser?.id;
           return (
             <div
               key={msg.id}
