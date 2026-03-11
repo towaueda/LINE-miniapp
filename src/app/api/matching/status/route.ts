@@ -19,7 +19,7 @@ export async function GET(request: Request) {
         .from("match_requests")
         .select("*")
         .eq("user_id", user.id)
-        .eq("status", "waiting")
+        .in("status", ["waiting", "two_person_offered", "no_match"])
         .order("created_at", { ascending: false })
         .limit(1)
         .single(),
@@ -53,7 +53,45 @@ export async function GET(request: Request) {
     }
 
     if (activeReq) {
-      return NextResponse.json({ status: "waiting", request: activeReq, hasPendingReview });
+      if (activeReq.status === "two_person_offered") {
+        // Fetch partner request to find overlapping proposed dates
+        let proposedDates: string[] = [];
+        if (activeReq.two_person_partner_id) {
+          const { data: partnerReq } = await supabaseAdmin
+            .from("match_requests")
+            .select("available_dates")
+            .eq("id", activeReq.two_person_partner_id)
+            .single();
+
+          if (partnerReq) {
+            const today = new Date().toISOString().split("T")[0];
+            const myDates: string[] = activeReq.available_dates || [];
+            const partnerDates: string[] = partnerReq.available_dates || [];
+            const partnerSet = new Set(partnerDates);
+            proposedDates = myDates
+              .filter((d: string) => partnerSet.has(d) && d >= today)
+              .sort();
+          }
+        }
+
+        return NextResponse.json({
+          status: "two_person_offered",
+          requestId: activeReq.id,
+          proposedDates,
+          hasPendingReview,
+        });
+      }
+
+      if (activeReq.status === "no_match") {
+        // Only return no_match if within last 7 days
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+        if (activeReq.updated_at >= sevenDaysAgo) {
+          return NextResponse.json({ status: "no_match", hasPendingReview });
+        }
+        // Older than 7 days — fall through to check active groups
+      } else if (activeReq.status === "waiting") {
+        return NextResponse.json({ status: "waiting", request: activeReq, hasPendingReview });
+      }
     }
 
     if (activeGroupIds.length > 0) {

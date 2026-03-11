@@ -68,6 +68,11 @@ export default function MatchingPage() {
   const [isSearching, setIsSearching] = useState(false);
   const [isWaiting, setIsWaiting] = useState(false);
   const [hasPendingReview, setHasPendingReview] = useState(false);
+  const [matchError, setMatchError] = useState<string | null>(null);
+  const [isTwoPersonOffered, setIsTwoPersonOffered] = useState(false);
+  const [twoPersonDates, setTwoPersonDates] = useState<string[]>([]);
+  const [twoPersonRequestId, setTwoPersonRequestId] = useState<string>('');
+  const [isNoMatch, setIsNoMatch] = useState(false);
   const [dates] = useState(getNextThursdays);
 
   const userLoggedIn = user?.isLoggedIn;
@@ -83,6 +88,8 @@ export default function MatchingPage() {
         hasPendingReview?: boolean;
         group?: ApiGroup;
         members?: ApiMember[];
+        requestId?: string;
+        proposedDates?: string[];
       }>("/api/matching/status");
 
       if (data.hasPendingReview) {
@@ -93,6 +100,12 @@ export default function MatchingPage() {
         const match = toMatchGroup(data.group, data.members);
         setMatchResult(match);
         localStorage.setItem(MATCH_STORAGE_KEY, JSON.stringify(match));
+      } else if (data.status === "two_person_offered") {
+        setIsTwoPersonOffered(true);
+        setTwoPersonDates(data.proposedDates || []);
+        setTwoPersonRequestId(data.requestId || '');
+      } else if (data.status === "no_match") {
+        setIsNoMatch(true);
       } else if (data.status === "waiting") {
         localStorage.removeItem(MATCH_STORAGE_KEY);
         setIsWaiting(true);
@@ -127,6 +140,9 @@ export default function MatchingPage() {
   const handleSearch = async () => {
     if (!selectedDates.length || !selectedArea || !user) return;
     setIsSearching(true);
+    setMatchError(null);
+    setIsNoMatch(false);
+    setIsTwoPersonOffered(false);
 
     try {
       const data = await apiFetch<{
@@ -147,9 +163,37 @@ export default function MatchingPage() {
         setIsWaiting(true);
       }
     } catch (e) {
-      console.error("Matching request failed:", e);
+      const msg = e instanceof Error ? e.message : '';
+      if (msg.includes('レビュー未完了')) {
+        setHasPendingReview(true);
+      } else {
+        setMatchError('マッチングリクエストに失敗しました。もう一度お試しください。');
+      }
     }
     setIsSearching(false);
+  };
+
+  const handleTwoPersonResponse = async (action: 'accept' | 'decline') => {
+    try {
+      const data = await apiFetch<{ status: string; group?: ApiGroup; members?: ApiMember[] }>(
+        '/api/matching/two-person-response',
+        { method: 'POST', body: JSON.stringify({ action }) }
+      );
+      if (data.status === 'matched' && data.group && data.members) {
+        setIsTwoPersonOffered(false);
+        const match = toMatchGroup(data.group, data.members);
+        setMatchResult(match);
+        localStorage.setItem(MATCH_STORAGE_KEY, JSON.stringify(match));
+      } else if (data.status === 'waiting_for_partner') {
+        setIsTwoPersonOffered(false);
+        setIsWaiting(true);
+      } else {
+        setIsTwoPersonOffered(false);
+        setIsNoMatch(true);
+      }
+    } catch (e) {
+      console.error('Two person response failed:', e);
+    }
   };
 
   const handleCancel = async () => {
@@ -161,6 +205,8 @@ export default function MatchingPage() {
       }
     }
     setIsWaiting(false);
+    setIsTwoPersonOffered(false);
+    setIsNoMatch(false);
   };
 
   if (!userLoggedIn) return null;
@@ -204,7 +250,18 @@ export default function MatchingPage() {
           setMatchResult(null);
           localStorage.removeItem(MATCH_STORAGE_KEY);
           setIsWaiting(false);
+          setIsTwoPersonOffered(false);
+          setIsNoMatch(false);
         }} />
+      ) : isTwoPersonOffered ? (
+        <TwoPersonOfferView
+          dates={twoPersonDates}
+          requestId={twoPersonRequestId}
+          onAccept={() => handleTwoPersonResponse('accept')}
+          onDecline={() => handleTwoPersonResponse('decline')}
+        />
+      ) : isNoMatch ? (
+        <NoMatchView onReset={() => { setIsNoMatch(false); }} />
       ) : isWaiting ? (
         <WaitingView onCancel={handleCancel} />
       ) : (
@@ -276,6 +333,11 @@ export default function MatchingPage() {
               "マッチングを探す"
             )}
           </button>
+
+          {/* Error Message */}
+          {matchError ? (
+            <p className="text-xs text-red-500 mt-2 text-center">{matchError}</p>
+          ) : null}
         </div>
       )}
     </div>
@@ -299,6 +361,87 @@ function WaitingView({ onCancel }: { onCancel: () => void }) {
         className="text-sm text-gray-400 underline"
       >
         キャンセルする
+      </button>
+    </div>
+  );
+}
+
+function formatDateLabel(dateStr: string): string {
+  // dateStr is YYYY-MM-DD
+  const [, month, day] = dateStr.split('-').map(Number);
+  const d = new Date(dateStr + 'T00:00:00');
+  const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+  const dayName = dayNames[d.getDay()];
+  return `${month}/${day}(${dayName})`;
+}
+
+function TwoPersonOfferView({
+  dates,
+  requestId,
+  onAccept,
+  onDecline,
+}: {
+  dates: string[];
+  requestId: string;
+  onAccept: () => void;
+  onDecline: () => void;
+}) {
+  void requestId;
+  return (
+    <div className="animate-fade-in">
+      <div className="text-center mb-6">
+        <div className="text-5xl mb-4">🍽️</div>
+        <h2 className="text-xl font-bold mb-2">2人でランチしませんか？</h2>
+        <p className="text-sm text-gray-500">
+          3人が揃わなかったため、2人でのランチをご提案します。
+        </p>
+      </div>
+
+      {dates.length > 0 ? (
+        <div className="bg-white rounded-2xl border border-gray-100 p-4 mb-6 shadow-sm">
+          <p className="text-xs font-semibold text-gray-500 mb-3">提案日程</p>
+          <div className="flex flex-wrap gap-2">
+            {dates.map((d) => (
+              <span
+                key={d}
+                className="bg-orange/10 text-orange text-sm font-medium px-3 py-1.5 rounded-lg"
+              >
+                {formatDateLabel(d)}
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      <button
+        onClick={onAccept}
+        className="w-full bg-orange hover:bg-orange/90 text-white font-bold py-3.5 rounded-xl transition-all active:scale-[0.98] mb-3"
+      >
+        はい、2人でも行きます！
+      </button>
+      <button
+        onClick={onDecline}
+        className="w-full bg-white text-gray-500 font-medium py-3 rounded-xl border border-gray-200 text-sm transition-all active:scale-[0.98]"
+      >
+        別の日程を探す
+      </button>
+    </div>
+  );
+}
+
+function NoMatchView({ onReset }: { onReset: () => void }) {
+  return (
+    <div className="animate-fade-in text-center py-12">
+      <div className="text-5xl mb-4">😔</div>
+      <h2 className="text-xl font-bold mb-2">マッチングなし</h2>
+      <p className="text-sm text-gray-500 mb-8">
+        今回はマッチングできませんでした。別の日程で再度お試しください。
+      </p>
+      <button
+        onClick={onReset}
+        className="w-full bg-line hover:bg-line-dark text-white font-bold py-3.5 rounded-xl transition-all active:scale-[0.98]"
+      >
+        別の日程で探す
       </button>
     </div>
   );
