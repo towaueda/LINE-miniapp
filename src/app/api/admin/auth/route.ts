@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
+import { generateAdminToken, verifyAdminToken } from "@/lib/admin-token";
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 
@@ -11,11 +12,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid password" }, { status: 401 });
     }
 
+    const token = await generateAdminToken(ADMIN_PASSWORD);
+
     const response = NextResponse.json({ success: true });
-    response.cookies.set("admin_token", ADMIN_PASSWORD, {
+    response.cookies.set("admin_token", token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
-      sameSite: "lax",
+      sameSite: "strict", // CSRF対策: strict に変更
       path: "/",
       maxAge: 60 * 60 * 24, // 24 hours
     });
@@ -32,11 +35,9 @@ export async function DELETE() {
   return response;
 }
 
-export function verifyAdmin(request: Request): boolean {
-  const adminHeader = request.headers.get("X-Admin-Password");
-  if (adminHeader === ADMIN_PASSWORD && ADMIN_PASSWORD) return true;
-
-  const cookieStore = cookies();
-  const token = cookieStore.get("admin_token");
-  return token?.value === ADMIN_PASSWORD && !!ADMIN_PASSWORD;
+// X-Admin-Password ヘッダーによるバイパスを削除し、cookieのHMACトークンのみで検証
+export async function verifyAdmin(request: Request): Promise<boolean> {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("admin_token")?.value;
+  return verifyAdminToken(token ?? "", ADMIN_PASSWORD);
 }

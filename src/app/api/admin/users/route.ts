@@ -3,14 +3,14 @@ import { verifyAdmin } from "../auth/route";
 import { supabaseAdmin } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
-  if (!verifyAdmin(request)) {
+  if (!(await verifyAdmin(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const url = new URL(request.url);
   const search = url.searchParams.get("search") || "";
-  const page = parseInt(url.searchParams.get("page") || "1");
-  const limit = parseInt(url.searchParams.get("limit") || "20");
+  const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
+  const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") || "20", 10)));
   const filter = url.searchParams.get("filter") || "all";
   const offset = (page - 1) * limit;
 

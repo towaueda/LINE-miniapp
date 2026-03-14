@@ -35,7 +35,7 @@ const STORAGE_KEY = "triangle_user";
 
 function loadUser(): UserProfile | null {
   if (typeof window === "undefined") return null;
-  const stored = localStorage.getItem(STORAGE_KEY);
+  const stored = sessionStorage.getItem(STORAGE_KEY);
   if (stored) {
     try {
       return JSON.parse(stored);
@@ -49,9 +49,9 @@ function loadUser(): UserProfile | null {
 function saveUser(user: UserProfile | null) {
   if (typeof window === "undefined") return;
   if (user) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(user));
   } else {
-    localStorage.removeItem(STORAGE_KEY);
+    sessionStorage.removeItem(STORAGE_KEY);
   }
 }
 
@@ -141,9 +141,9 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setUser(null);
     setDbUserState(null);
-    localStorage.removeItem("triangle_match");
-    localStorage.removeItem("triangle_chat");
-    localStorage.removeItem("triangle_review_done");
+    sessionStorage.removeItem("triangle_match");
+    sessionStorage.removeItem("triangle_chat");
+    sessionStorage.removeItem("triangle_review_done");
     const liffInstance = getLiff();
     if (isLiffMode && liffInstance?.isLoggedIn()) {
       liffInstance.logout();

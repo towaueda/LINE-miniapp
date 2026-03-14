@@ -6,7 +6,7 @@ export async function PUT(
   request: Request,
   { params }: { params: { id: string } }
 ) {
-  if (!verifyAdmin(request)) {
+  if (!(await verifyAdmin(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 

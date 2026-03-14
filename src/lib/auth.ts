@@ -2,7 +2,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import type { DbUser } from "@/types";
 
 // --- LINE トークン検証キャッシュ（インメモリ、TTL 5分、最大500件） ---
-const TOKEN_CACHE_TTL = 5 * 60 * 1000; // 5分
+const TOKEN_CACHE_TTL = 60 * 1000; // 1分（トークン無効化への応答時間を短縮）
 const TOKEN_CACHE_MAX = 500;
 
 interface CachedProfile {

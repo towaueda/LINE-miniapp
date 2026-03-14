@@ -1,7 +1,6 @@
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
 
 const NAV_ITEMS = [
   { href: "/admin", label: "ダッシュボード", icon: "📊" },
@@ -16,29 +15,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const pathname = usePathname();
   const router = useRouter();
 
-  // 同期的cookie確認（useEffect不要で余分な再レンダリングを削減）
-  const [isAuthed] = useState(() => {
-    if (typeof document === "undefined") return false;
-    return document.cookie.includes("admin_token");
-  });
-
-  // リダイレクトの副作用のみ useEffect で処理
-  useEffect(() => {
-    if (pathname !== "/admin/login" && !isAuthed) {
-      router.push("/admin/login");
-    }
-  }, [pathname, isAuthed, router]);
-
   if (pathname === "/admin/login") {
     return <>{children}</>;
-  }
-
-  if (!isAuthed) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin w-8 h-8 border-3 border-orange border-t-transparent rounded-full" />
-      </div>
-    );
   }
 
   return (
