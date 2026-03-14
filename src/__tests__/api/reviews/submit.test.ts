@@ -192,7 +192,6 @@ describe("POST /api/reviews/submit", () => {
       }
       if (table === "reviews") {
         // 既存なし → insert でエラー
-        let callCount = 0;
         const builder = createQueryBuilder({ data: [], error: null });
         const origInsert = (builder.insert as ReturnType<typeof vi.fn>);
         origInsert.mockReturnValue(

@@ -202,7 +202,6 @@ describe("ChatPage - 実際のユーザー操作", () => {
       render(<ChatPage />);
       await waitFor(() => expect(screen.getByPlaceholderText("メッセージを入力...")).toBeInTheDocument());
 
-      const sendBtn = screen.getByRole("button", { name: "" }); // SVG アイコンボタン
       // disabled 属性で確認
       const inputEl = screen.getByPlaceholderText("メッセージを入力...");
       expect(inputEl).toBeInTheDocument();

@@ -1,5 +1,4 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { verifyLineToken, authenticateRequest } from "@/lib/auth";
 
 // supabaseAdmin をモック
 vi.mock("@/lib/supabase/server", () => ({

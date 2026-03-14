@@ -36,7 +36,7 @@ export async function DELETE() {
 }
 
 // X-Admin-Password ヘッダーによるバイパスを削除し、cookieのHMACトークンのみで検証
-export async function verifyAdmin(request: Request): Promise<boolean> {
+export async function verifyAdmin(_request?: Request): Promise<boolean> {
   const cookieStore = await cookies();
   const token = cookieStore.get("admin_token")?.value;
   return verifyAdminToken(token ?? "", ADMIN_PASSWORD);
