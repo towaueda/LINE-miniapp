@@ -45,7 +45,10 @@ export function useRealtimeChat(groupId: string | null) {
 
   // 初期履歴の読み込み
   useEffect(() => {
-    if (!groupId) return;
+    if (!groupId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
 
     apiFetch<ChatResponse>(`/api/chat/${groupId}`)

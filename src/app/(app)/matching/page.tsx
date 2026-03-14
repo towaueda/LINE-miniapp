@@ -48,7 +48,7 @@ function getNextThursdays(): { label: string; value: string }[] {
       const day = d.getDate();
       dates.push({
         label: `${month}/${day}(木)`,
-        value: d.toISOString().split("T")[0],
+        value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`,
       });
     }
   }
@@ -129,7 +129,8 @@ export default function MatchingPage() {
     if (isLiffMode && dbUser) {
       checkStatus();
     }
-  }, [isReady, userLoggedIn, userArea, router, isLiffMode, dbUser, checkStatus]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, userLoggedIn, userArea, isLiffMode, dbUser, checkStatus]);
 
   const toggleDate = (val: string) => {
     setSelectedDates((prev) =>

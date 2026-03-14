@@ -82,7 +82,8 @@ export default function ChatPage() {
     }
 
     localStorage.removeItem(CHAT_KEY);
-  }, [isReady, userLoggedIn, router]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, userLoggedIn]);
 
   // 1分ごとに再レンダリングして残り時間を更新
   useEffect(() => {

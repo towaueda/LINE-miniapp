@@ -65,7 +65,8 @@ export default function ReviewPage() {
         comment: "",
       }))
     );
-  }, [isReady, userLoggedIn, userId, router]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, userLoggedIn, userId]);
 
   const memberMap = useMemo(
     () => (match ? new Map(match.members.map((m) => [m.id, m])) : new Map()),
