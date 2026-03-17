@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { adminDb } from "@/lib/firebase/admin";
 import {
   isValidArea,
   validateNickname,
@@ -12,7 +12,6 @@ import {
 } from "@/lib/validation";
 
 export async function PUT(request: Request) {
-  // auth と body parsing を並列開始
   const authPromise = authenticateRequest(request);
   const bodyPromise = request.json();
 
@@ -25,7 +24,6 @@ export async function PUT(request: Request) {
     const body = await bodyPromise;
     const { nickname, birthYear, area, industry, company, bio, avatarEmoji } = body;
 
-    // 各フィールドのバリデーション
     const errors: string[] = [];
 
     if (nickname !== undefined) {
@@ -60,7 +58,7 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: errors.join(", ") }, { status: 400 });
     }
 
-    const updates: Record<string, unknown> = {};
+    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (nickname !== undefined) updates.nickname = nickname;
     if (birthYear !== undefined) updates.birth_year = birthYear;
     if (area !== undefined) updates.area = area;
@@ -69,18 +67,10 @@ export async function PUT(request: Request) {
     if (bio !== undefined) updates.bio = bio;
     if (avatarEmoji !== undefined) updates.avatar_emoji = avatarEmoji;
 
-    const { data, error } = await supabaseAdmin
-      .from("users")
-      .update(updates)
-      .eq("id", user.id)
-      .select()
-      .single();
+    await adminDb.collection("users").doc(user.id).update(updates);
 
-    if (error) {
-      return NextResponse.json({ error: "プロフィールの更新に失敗しました" }, { status: 500 });
-    }
-
-    return NextResponse.json({ user: data });
+    const updatedDoc = await adminDb.collection("users").doc(user.id).get();
+    return NextResponse.json({ user: { id: updatedDoc.id, ...updatedDoc.data() } });
   } catch {
     return NextResponse.json({ error: "サーバーエラーが発生しました" }, { status: 500 });
   }

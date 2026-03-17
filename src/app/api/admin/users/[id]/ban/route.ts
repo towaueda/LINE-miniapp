@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyAdmin } from "../../../auth/route";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { adminDb } from "@/lib/firebase/admin";
 
 export async function POST(
   request: Request,
@@ -14,14 +14,11 @@ export async function POST(
     const body = await request.json().catch(() => ({}));
     const reason = body.reason || "";
 
-    const { error } = await supabaseAdmin
-      .from("users")
-      .update({ is_banned: true, ban_reason: reason })
-      .eq("id", params.id);
-
-    if (error) {
-      return NextResponse.json({ error: "Failed to ban user" }, { status: 500 });
-    }
+    await adminDb.collection("users").doc(params.id).update({
+      is_banned: true,
+      ban_reason: reason,
+      updated_at: new Date().toISOString(),
+    });
 
     return NextResponse.json({ success: true });
   } catch {
@@ -37,14 +34,15 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { error } = await supabaseAdmin
-    .from("users")
-    .update({ is_banned: false, ban_reason: null })
-    .eq("id", params.id);
+  try {
+    await adminDb.collection("users").doc(params.id).update({
+      is_banned: false,
+      ban_reason: null,
+      updated_at: new Date().toISOString(),
+    });
 
-  if (error) {
-    return NextResponse.json({ error: "Failed to unban user" }, { status: 500 });
+    return NextResponse.json({ success: true });
+  } catch {
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
-
-  return NextResponse.json({ success: true });
 }

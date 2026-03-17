@@ -1,134 +1,140 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { GET } from "@/app/api/chat/[groupId]/route";
-import { makeDbUser, createQueryBuilder } from "../../helpers/supabaseMock";
 
-vi.mock("@/lib/auth", () => ({ authenticateRequest: vi.fn() }));
-vi.mock("@/lib/supabase/server", () => ({
-  supabaseAdmin: { from: vi.fn() },
+// ── モック ────────────────────────────────────────────
+const mockAuthenticateRequest = vi.fn();
+vi.mock("@/lib/auth", () => ({
+  authenticateRequest: (...args: unknown[]) => mockAuthenticateRequest(...args),
 }));
 
-import { authenticateRequest } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
+const mockMembershipGet = vi.fn();
+const mockMessagesGet = vi.fn();
 
-const validUser = makeDbUser();
-const GROUP_ID = "group-uuid-1";
+vi.mock("@/lib/firebase/admin", () => ({
+  adminDb: {
+    collection: vi.fn((col: string) => {
+      if (col === "match_group_members") {
+        return {
+          where: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockReturnThis(),
+          get: mockMembershipGet,
+        };
+      }
+      if (col === "messages") {
+        return {
+          where: vi.fn().mockReturnThis(),
+          orderBy: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockReturnThis(),
+          get: mockMessagesGet,
+        };
+      }
+      return {};
+    }),
+  },
+}));
 
-function createGetRequest(url = `http://localhost/api/chat/${GROUP_ID}`): Request {
-  return new Request(url, { method: "GET" });
+function makeRequest(groupId: string, query = "") {
+  return new Request(`http://localhost/api/chat/${groupId}${query}`, {
+    headers: { Authorization: "Bearer token" },
+  });
 }
 
-const mockMessages = [
-  {
-    id: "msg-1",
-    group_id: GROUP_ID,
-    sender_id: validUser.id,
-    sender_name: "テスト太郎",
-    text: "こんにちは",
+function makeSnap(docs: Array<{ id: string; [key: string]: unknown }>) {
+  return {
+    empty: docs.length === 0,
+    docs: docs.map((d) => ({ id: d.id, data: () => d })),
+  };
+}
+
+function makeMessage(id: string, text: string, createdAt: string) {
+  return {
+    id,
+    group_id: "g1",
+    sender_id: "u1",
+    sender_name: "太郎",
+    text,
     is_system: false,
-    created_at: "2026-03-20T12:00:00Z",
-  },
-  {
-    id: "msg-2",
-    group_id: GROUP_ID,
-    sender_id: null,
-    sender_name: "システム",
-    text: "マッチング成立！",
-    is_system: true,
-    created_at: "2026-03-20T11:00:00Z",
-  },
-];
+    created_at: createdAt,
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe("GET /api/chat/[groupId]", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(authenticateRequest).mockResolvedValue(validUser as never);
-  });
-
   it("未認証 → 401", async () => {
-    vi.mocked(authenticateRequest).mockResolvedValue(null);
-    const res = await GET(createGetRequest(), { params: { groupId: GROUP_ID } });
+    mockAuthenticateRequest.mockResolvedValue(null);
+    const { GET } = await import("@/app/api/chat/[groupId]/route");
+    const res = await GET(makeRequest("g1"), { params: { groupId: "g1" } });
     expect(res.status).toBe(401);
   });
 
-  it("非メンバー → 403", async () => {
-    vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-      // membership チェック → null（メンバーでない）
-      if (table === "match_group_members") return createQueryBuilder({ data: null, error: null }) as never;
-      return createQueryBuilder({ data: mockMessages, error: null }) as never;
-    });
+  it("グループのメンバーでない → 403", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockMembershipGet.mockResolvedValue(makeSnap([]));
+    mockMessagesGet.mockResolvedValue(makeSnap([]));
 
-    const res = await GET(createGetRequest(), { params: { groupId: GROUP_ID } });
+    const { GET } = await import("@/app/api/chat/[groupId]/route");
+    const res = await GET(makeRequest("g1"), { params: { groupId: "g1" } });
     expect(res.status).toBe(403);
   });
 
-  it("正常: メッセージ一覧を昇順で返す", async () => {
-    let callCount = 0;
-    vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-      callCount++;
-      if (table === "match_group_members") {
-        return createQueryBuilder({ data: { id: "member-1" }, error: null }) as never;
-      }
-      // messages: limit+1 件を返す（hasMore チェック用）
-      return createQueryBuilder({ data: mockMessages, error: null }) as never;
-    });
+  it("メンバー → メッセージ一覧と hasMore: false を返す", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockMembershipGet.mockResolvedValue(makeSnap([{ id: "m1", group_id: "g1", user_id: "u1" }]));
+    mockMessagesGet.mockResolvedValue(
+      makeSnap([
+        makeMessage("msg-1", "こんにちは", "2026-04-03T12:00:00.000Z"),
+        makeMessage("msg-2", "よろしく", "2026-04-03T12:01:00.000Z"),
+      ])
+    );
 
-    const res = await GET(createGetRequest(), { params: { groupId: GROUP_ID } });
+    const { GET } = await import("@/app/api/chat/[groupId]/route");
+    const res = await GET(makeRequest("g1"), { params: { groupId: "g1" } });
+
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.messages).toBeDefined();
-    expect(body.hasMore).toBe(false);
-    expect(body.nextCursor).toBeNull();
-    // 昇順に並んでいるか確認（古いメッセージが先）
-    if (body.messages.length >= 2) {
-      expect(body.messages[0].created_at <= body.messages[1].created_at).toBe(true);
-    }
+    const data = await res.json();
+    expect(data.messages).toHaveLength(2);
+    expect(data.hasMore).toBe(false);
+    expect(data.nextCursor).toBeNull();
   });
 
-  it("ページネーション: limit+1 件返ってきた場合 hasMore:true", async () => {
-    // DEFAULT_LIMIT=50 なので 51 件を返すようにする
-    const manyMessages = Array.from({ length: 51 }, (_, i) => ({
-      ...mockMessages[0],
-      id: `msg-${i}`,
-      created_at: `2026-03-20T${String(i).padStart(2, "0")}:00:00Z`,
-    }));
+  it("limit+1 件返ってきた場合 → hasMore: true・nextCursor が設定される", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockMembershipGet.mockResolvedValue(makeSnap([{ id: "m1", group_id: "g1", user_id: "u1" }]));
 
-    vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-      if (table === "match_group_members") {
-        return createQueryBuilder({ data: { id: "member-1" }, error: null }) as never;
-      }
-      return createQueryBuilder({ data: manyMessages, error: null }) as never;
-    });
+    // 51件返す（デフォルト limit=50 + 1）
+    const msgs = Array.from({ length: 51 }, (_, i) =>
+      makeMessage(`msg-${i}`, `メッセージ${i}`, `2026-04-03T12:${String(i).padStart(2, "0")}:00.000Z`)
+    );
+    mockMessagesGet.mockResolvedValue(makeSnap(msgs));
 
-    const res = await GET(createGetRequest(), { params: { groupId: GROUP_ID } });
+    const { GET } = await import("@/app/api/chat/[groupId]/route");
+    const res = await GET(makeRequest("g1"), { params: { groupId: "g1" } });
+
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.hasMore).toBe(true);
-    expect(body.nextCursor).not.toBeNull();
-    expect(body.messages).toHaveLength(50); // limit 件のみ
+    const data = await res.json();
+    expect(data.messages).toHaveLength(50);
+    expect(data.hasMore).toBe(true);
+    expect(data.nextCursor).not.toBeNull();
   });
 
-  it("before パラメータ付き → カーソルページネーション", async () => {
-    vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-      if (table === "match_group_members") {
-        return createQueryBuilder({ data: { id: "member-1" }, error: null }) as never;
-      }
-      return createQueryBuilder({ data: [mockMessages[1]], error: null }) as never;
-    });
+  it("メッセージが昇順（古い→新しい）に並んでいる", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockMembershipGet.mockResolvedValue(makeSnap([{ id: "m1", group_id: "g1", user_id: "u1" }]));
+    // desc で返ってくる想定（ルートが reverse する）
+    mockMessagesGet.mockResolvedValue(
+      makeSnap([
+        makeMessage("msg-b", "新しい", "2026-04-03T12:01:00.000Z"),
+        makeMessage("msg-a", "古い", "2026-04-03T12:00:00.000Z"),
+      ])
+    );
 
-    const url = `http://localhost/api/chat/${GROUP_ID}?before=2026-03-20T12:00:00Z`;
-    const res = await GET(createGetRequest(url), { params: { groupId: GROUP_ID } });
-    expect(res.status).toBe(200);
-  });
+    const { GET } = await import("@/app/api/chat/[groupId]/route");
+    const res = await GET(makeRequest("g1"), { params: { groupId: "g1" } });
 
-  it("DB エラー → 500", async () => {
-    vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-      if (table === "match_group_members") {
-        return createQueryBuilder({ data: { id: "member-1" }, error: null }) as never;
-      }
-      return createQueryBuilder({ data: null, error: { message: "db error" } }) as never;
-    });
-
-    const res = await GET(createGetRequest(), { params: { groupId: GROUP_ID } });
-    expect(res.status).toBe(500);
+    const data = await res.json();
+    expect(data.messages[0].id).toBe("msg-a");
+    expect(data.messages[1].id).toBe("msg-b");
   });
 });

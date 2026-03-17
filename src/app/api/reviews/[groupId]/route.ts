@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { adminDb } from "@/lib/firebase/admin";
 
 export async function GET(
   request: Request,
@@ -13,26 +13,22 @@ export async function GET(
 
   const { groupId } = params;
 
-  // リクエストしたユーザーがそのグループのメンバーであることを確認
-  const { data: membership, error: memberError } = await supabaseAdmin
-    .from("match_group_members")
-    .select("id")
-    .eq("group_id", groupId)
-    .eq("user_id", user.id)
-    .single();
+  const membershipSnap = await adminDb
+    .collection("match_group_members")
+    .where("group_id", "==", groupId)
+    .where("user_id", "==", user.id)
+    .limit(1)
+    .get();
 
-  if (memberError || !membership) {
+  if (membershipSnap.empty) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const { data: reviews, error } = await supabaseAdmin
-    .from("reviews")
-    .select("*")
-    .eq("group_id", groupId);
+  const reviewsSnap = await adminDb
+    .collection("reviews")
+    .where("group_id", "==", groupId)
+    .get();
 
-  if (error) {
-    return NextResponse.json({ error: "Failed to load reviews" }, { status: 500 });
-  }
-
-  return NextResponse.json({ reviews: reviews || [] });
+  const reviews = reviewsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  return NextResponse.json({ reviews });
 }

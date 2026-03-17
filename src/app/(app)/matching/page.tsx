@@ -71,7 +71,6 @@ export default function MatchingPage() {
   const [matchError, setMatchError] = useState<string | null>(null);
   const [isTwoPersonOffered, setIsTwoPersonOffered] = useState(false);
   const [twoPersonDates, setTwoPersonDates] = useState<string[]>([]);
-  const [twoPersonRequestId, setTwoPersonRequestId] = useState<string>('');
   const [isNoMatch, setIsNoMatch] = useState(false);
   const [dates] = useState(getNextThursdays);
 
@@ -103,7 +102,6 @@ export default function MatchingPage() {
       } else if (data.status === "two_person_offered") {
         setIsTwoPersonOffered(true);
         setTwoPersonDates(data.proposedDates || []);
-        setTwoPersonRequestId(data.requestId || '');
       } else if (data.status === "no_match") {
         setIsNoMatch(true);
       } else if (data.status === "waiting") {
@@ -257,7 +255,6 @@ export default function MatchingPage() {
       ) : isTwoPersonOffered ? (
         <TwoPersonOfferView
           dates={twoPersonDates}
-          requestId={twoPersonRequestId}
           onAccept={() => handleTwoPersonResponse('accept')}
           onDecline={() => handleTwoPersonResponse('decline')}
         />
@@ -378,16 +375,13 @@ function formatDateLabel(dateStr: string): string {
 
 function TwoPersonOfferView({
   dates,
-  requestId,
   onAccept,
   onDecline,
 }: {
   dates: string[];
-  requestId: string;
   onAccept: () => void;
   onDecline: () => void;
 }) {
-  void requestId;
   return (
     <div className="animate-fade-in">
       <div className="text-center mb-6">

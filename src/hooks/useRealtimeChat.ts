@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { collection, query, where, orderBy, onSnapshot, limit, Query, DocumentData } from "firebase/firestore";
 import type { ChatMessage } from "@/types";
 import { apiFetch } from "@/lib/api";
 
@@ -40,8 +41,7 @@ export function useRealtimeChat(groupId: string | null) {
   const [hasMore, setHasMore] = useState(false);
   const nextCursorRef = useRef<string | null>(null);
   const loadingMoreRef = useRef(false);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const channelRef = useRef<any>(null);
+  const unsubscribeRef = useRef<(() => void) | null>(null);
 
   // 初期履歴の読み込み
   useEffect(() => {
@@ -63,44 +63,47 @@ export function useRealtimeChat(groupId: string | null) {
       .finally(() => setLoading(false));
   }, [groupId]);
 
-  // リアルタイム購読（Supabase を動的インポート）
+  // Firestore リアルタイム購読
   useEffect(() => {
     if (!groupId) return;
-    if (channelRef.current) return; // Strict Mode 二重登録ガード
+    if (unsubscribeRef.current) return;
 
-    let cancelled = false;
+    import("@/lib/firebase/client").then(({ db }) => {
+      const q = query(
+        collection(db, "messages"),
+        where("group_id", "==", groupId),
+        orderBy("created_at", "desc"),
+        limit(1)
+      ) as Query<DocumentData>;
 
-    import("@/lib/supabase/client").then(({ supabase }) => {
-      if (cancelled) return;
-
-      const channel = supabase
-        .channel(`chat:${groupId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "messages",
-            filter: `group_id=eq.${groupId}`,
-          },
-          (payload) => {
-            const newMsg = dbToChat(payload.new as DbMessagePayload);
+      const unsubscribe = onSnapshot(q, (snapshot) => {
+        snapshot.docChanges().forEach((change) => {
+          if (change.type === "added") {
+            const data = change.doc.data();
+            const newMsg = dbToChat({
+              id: change.doc.id,
+              group_id: data.group_id,
+              sender_id: data.sender_id,
+              sender_name: data.sender_name,
+              text: data.text,
+              is_system: data.is_system,
+              created_at: data.created_at,
+            });
             setMessages((prev) => {
               if (prev.some((m) => m.id === newMsg.id)) return prev;
               return [...prev, newMsg];
             });
           }
-        )
-        .subscribe();
+        });
+      });
 
-      channelRef.current = channel;
+      unsubscribeRef.current = unsubscribe;
     });
 
     return () => {
-      cancelled = true;
-      if (channelRef.current) {
-        channelRef.current.unsubscribe();
-        channelRef.current = null;
+      if (unsubscribeRef.current) {
+        unsubscribeRef.current();
+        unsubscribeRef.current = null;
       }
     };
   }, [groupId]);

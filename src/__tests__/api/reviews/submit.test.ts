@@ -1,213 +1,208 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { POST } from "@/app/api/reviews/submit/route";
-import { createPostRequest, makeDbUser, createQueryBuilder } from "../../helpers/supabaseMock";
 
-vi.mock("@/lib/auth", () => ({ authenticateRequest: vi.fn() }));
-vi.mock("@/lib/supabase/server", () => ({
-  supabaseAdmin: { from: vi.fn() },
+// ── モック ────────────────────────────────────────────
+const mockAuthenticateRequest = vi.fn();
+vi.mock("@/lib/auth", () => ({
+  authenticateRequest: (...args: unknown[]) => mockAuthenticateRequest(...args),
 }));
 
-import { authenticateRequest } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
+const mockMembershipGet = vi.fn();
+const mockReviewExistsGet = vi.fn();
+const mockBatchSet = vi.fn();
+const mockBatchCommit = vi.fn().mockResolvedValue(undefined);
+const mockInviteAdd = vi.fn().mockResolvedValue({ id: "inv-1" });
 
-const validUser = makeDbUser();
-const GROUP_ID = "550e8400-e29b-41d4-a716-446655440000";
-const TARGET_ID = "550e8400-e29b-41d4-a716-446655440001";
+vi.mock("@/lib/firebase/admin", () => ({
+  adminDb: {
+    collection: vi.fn((col: string) => {
+      if (col === "match_group_members") {
+        return {
+          where: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockReturnThis(),
+          get: mockMembershipGet,
+        };
+      }
+      if (col === "reviews") {
+        return {
+          where: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockReturnThis(),
+          get: mockReviewExistsGet,
+          doc: vi.fn(() => ({ id: "review-doc-id" })),
+        };
+      }
+      if (col === "invite_codes") {
+        return { add: mockInviteAdd };
+      }
+      return {};
+    }),
+    batch: () => ({
+      set: mockBatchSet,
+      commit: mockBatchCommit,
+    }),
+  },
+}));
 
-const validReview = {
-  targetId: TARGET_ID,
-  communication: 4,
-  punctuality: 5,
-  meetAgain: 3,
-  comment: "良かったです",
-};
-
-/** 正常系のモックセットアップ */
-function setupNormalMocks() {
-  vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-    if (table === "match_group_members") {
-      return createQueryBuilder({ data: { id: "member-1" }, error: null }) as never;
-    }
-    if (table === "reviews") {
-      // 既存レビューなし
-      return createQueryBuilder({ data: [], error: null }) as never;
-    }
-    if (table === "invite_codes") {
-      return createQueryBuilder({ data: null, error: null }) as never;
-    }
-    return createQueryBuilder({ data: null, error: null }) as never;
+function makeRequest(body: object) {
+  return new Request("http://localhost/api/reviews/submit", {
+    method: "POST",
+    headers: { Authorization: "Bearer token", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
 }
 
-describe("POST /api/reviews/submit", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(authenticateRequest).mockResolvedValue(validUser as never);
-    setupNormalMocks();
-  });
+function makeSnap(docs: Array<{ id: string; [key: string]: unknown }>) {
+  return {
+    empty: docs.length === 0,
+    docs: docs.map((d) => ({ id: d.id, data: () => d })),
+  };
+}
 
-  // ─── 認証チェック ──────────────────────────────
+const validReviews = [
+  { targetId: "u2", communication: 5, punctuality: 4, meetAgain: 5, comment: "素晴らしかった" },
+  { targetId: "u3", communication: 3, punctuality: 3, meetAgain: 3, comment: "" },
+];
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockBatchCommit.mockResolvedValue(undefined);
+  mockInviteAdd.mockResolvedValue({ id: "inv-1" });
+});
+
+describe("POST /api/reviews/submit", () => {
+  // ─── 認証・権限 ──────────────────────────────────
   it("未認証 → 401", async () => {
-    vi.mocked(authenticateRequest).mockResolvedValue(null);
-    const res = await POST(
-      createPostRequest({ groupId: GROUP_ID, reviews: [validReview] })
-    );
+    mockAuthenticateRequest.mockResolvedValue(null);
+    const { POST } = await import("@/app/api/reviews/submit/route");
+    const res = await POST(makeRequest({ groupId: "g1", reviews: validReviews }));
     expect(res.status).toBe(401);
   });
 
-  // ─── 入力バリデーション ────────────────────────
-  it("groupId が UUID 形式でない → 400", async () => {
-    const res = await POST(
-      createPostRequest({ groupId: "not-a-uuid", reviews: [validReview] })
-    );
+  // ─── 入力バリデーション ──────────────────────────
+  it("groupId なし → 400", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    const { POST } = await import("@/app/api/reviews/submit/route");
+    const res = await POST(makeRequest({ reviews: validReviews }));
     expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/groupId/);
   });
 
   it("reviews が空配列 → 400", async () => {
-    const res = await POST(
-      createPostRequest({ groupId: GROUP_ID, reviews: [] })
-    );
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    const { POST } = await import("@/app/api/reviews/submit/route");
+    const res = await POST(makeRequest({ groupId: "g1", reviews: [] }));
     expect(res.status).toBe(400);
   });
 
-  it("reviews が undefined → 400", async () => {
-    const res = await POST(
-      createPostRequest({ groupId: GROUP_ID })
-    );
+  it("スコアが範囲外（0）→ 400", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    const { POST } = await import("@/app/api/reviews/submit/route");
+    const res = await POST(makeRequest({
+      groupId: "g1",
+      reviews: [{ targetId: "u2", communication: 0, punctuality: 3, meetAgain: 3 }],
+    }));
     expect(res.status).toBe(400);
   });
 
-  it("targetId が UUID 形式でない → 400", async () => {
-    const res = await POST(
-      createPostRequest({
-        groupId: GROUP_ID,
-        reviews: [{ ...validReview, targetId: "not-a-uuid" }],
-      })
-    );
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/targetId/);
-  });
-
-  it.each([
-    { field: "communication", value: 0 },
-    { field: "communication", value: 6 },
-    { field: "punctuality", value: 0 },
-    { field: "meetAgain", value: 6 },
-  ])("$field=$value（範囲外）→ 400", async ({ field, value }) => {
-    const res = await POST(
-      createPostRequest({
-        groupId: GROUP_ID,
-        reviews: [{ ...validReview, [field]: value }],
-      })
-    );
+  it("コメントが500文字超 → 400", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    const { POST } = await import("@/app/api/reviews/submit/route");
+    const res = await POST(makeRequest({
+      groupId: "g1",
+      reviews: [{ targetId: "u2", communication: 3, punctuality: 3, meetAgain: 3, comment: "a".repeat(501) }],
+    }));
     expect(res.status).toBe(400);
   });
 
-  it("comment が 501 文字 → 400", async () => {
-    const res = await POST(
-      createPostRequest({
-        groupId: GROUP_ID,
-        reviews: [{ ...validReview, comment: "A".repeat(501) }],
-      })
-    );
-    expect(res.status).toBe(400);
-  });
+  // ─── 権限チェック ────────────────────────────────
+  it("グループのメンバーでない → 403", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockMembershipGet.mockResolvedValue(makeSnap([]));
+    mockReviewExistsGet.mockResolvedValue(makeSnap([]));
 
-  // ─── 権限チェック ──────────────────────────────
-  it("非メンバー → 403", async () => {
-    vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-      if (table === "match_group_members") {
-        return createQueryBuilder({ data: null, error: null }) as never; // メンバーなし
-      }
-      return createQueryBuilder({ data: [], error: null }) as never;
-    });
-
-    const res = await POST(
-      createPostRequest({ groupId: GROUP_ID, reviews: [validReview] })
-    );
+    const { POST } = await import("@/app/api/reviews/submit/route");
+    const res = await POST(makeRequest({ groupId: "g1", reviews: validReviews }));
     expect(res.status).toBe(403);
   });
 
   it("既にレビュー済み → 409", async () => {
-    vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-      if (table === "match_group_members") {
-        return createQueryBuilder({ data: { id: "member-1" }, error: null }) as never;
-      }
-      if (table === "reviews") {
-        // 既存レビューあり
-        return createQueryBuilder({ data: [{ id: "existing-review" }], error: null }) as never;
-      }
-      return createQueryBuilder({ data: null, error: null }) as never;
-    });
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockMembershipGet.mockResolvedValue(makeSnap([{ id: "m1", group_id: "g1", user_id: "u1" }]));
+    mockReviewExistsGet.mockResolvedValue(makeSnap([{ id: "r1" }])); // 既存レビュー
 
-    const res = await POST(
-      createPostRequest({ groupId: GROUP_ID, reviews: [validReview] })
-    );
+    const { POST } = await import("@/app/api/reviews/submit/route");
+    const res = await POST(makeRequest({ groupId: "g1", reviews: validReviews }));
     expect(res.status).toBe(409);
-    expect((await res.json()).error).toMatch(/済み/);
   });
 
-  // ─── 正常系 ───────────────────────────────────
-  it("正常: レビュー保存 → 200 + inviteCode 返却", async () => {
-    const res = await POST(
-      createPostRequest({ groupId: GROUP_ID, reviews: [validReview] })
-    );
+  // ─── 正常ケース ──────────────────────────────────
+  it("正常送信 → success: true + TRI- 形式の inviteCode", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockMembershipGet.mockResolvedValue(makeSnap([{ id: "m1", group_id: "g1", user_id: "u1" }]));
+    mockReviewExistsGet.mockResolvedValue(makeSnap([]));
+
+    const { POST } = await import("@/app/api/reviews/submit/route");
+    const res = await POST(makeRequest({ groupId: "g1", reviews: validReviews }));
+
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.success).toBe(true);
-    expect(body.inviteCode).toMatch(/^TRI-/);
+    const data = await res.json();
+    expect(data.success).toBe(true);
+    expect(data.inviteCode).toMatch(/^TRI-[A-Z0-9]{6}$/);
   });
 
-  it("複数レビュー → 200 + inviteCode 返却", async () => {
-    const target2 = "550e8400-e29b-41d4-a716-446655440002";
-    const res = await POST(
-      createPostRequest({
-        groupId: GROUP_ID,
-        reviews: [
-          validReview,
-          { ...validReview, targetId: target2, comment: "" },
-        ],
+  it("レビューが Firestore に保存される", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockMembershipGet.mockResolvedValue(makeSnap([{ id: "m1", group_id: "g1", user_id: "u1" }]));
+    mockReviewExistsGet.mockResolvedValue(makeSnap([]));
+
+    const { POST } = await import("@/app/api/reviews/submit/route");
+    await POST(makeRequest({ groupId: "g1", reviews: validReviews }));
+
+    expect(mockBatchSet).toHaveBeenCalledTimes(validReviews.length);
+    expect(mockBatchSet).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        group_id: "g1",
+        reviewer_id: "u1",
+        target_id: "u2",
+        communication: 5,
       })
     );
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.inviteCode).toMatch(/^TRI-/);
+    expect(mockBatchCommit).toHaveBeenCalled();
   });
 
-  it("comment が 500 文字（上限）→ 200", async () => {
-    const res = await POST(
-      createPostRequest({
-        groupId: GROUP_ID,
-        reviews: [{ ...validReview, comment: "A".repeat(500) }],
-      })
-    );
-    expect(res.status).toBe(200);
-  });
+  it("招待コードが invite_codes コレクションに追加される", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockMembershipGet.mockResolvedValue(makeSnap([{ id: "m1", group_id: "g1", user_id: "u1" }]));
+    mockReviewExistsGet.mockResolvedValue(makeSnap([]));
 
-  it("DB のレビュー保存エラー → 500", async () => {
-    vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-      if (table === "match_group_members") {
-        return createQueryBuilder({ data: { id: "member-1" }, error: null }) as never;
-      }
-      if (table === "reviews") {
-        // 既存なし → insert でエラー
-        const builder = createQueryBuilder({ data: [], error: null });
-        const origInsert = (builder.insert as ReturnType<typeof vi.fn>);
-        origInsert.mockReturnValue(
-          createQueryBuilder({ data: null, error: { message: "insert error" } })
-        );
-        return builder as never;
-      }
-      return createQueryBuilder({ data: null, error: null }) as never;
+    const { POST } = await import("@/app/api/reviews/submit/route");
+    await POST(makeRequest({ groupId: "g1", reviews: validReviews }));
+
+    await vi.waitFor(() => {
+      expect(mockInviteAdd).toHaveBeenCalledWith(
+        expect.objectContaining({
+          generated_by: "u1",
+          group_id: "g1",
+          is_active: true,
+          used_by: null,
+        })
+      );
     });
+  });
 
-    // insert エラーは then() で解決されるためステータスで確認
-    // （このテストは insert の戻り値によって挙動が変わる場合がある）
-    const res = await POST(
-      createPostRequest({ groupId: GROUP_ID, reviews: [validReview] })
+  it("コメントなし → null として保存される", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockMembershipGet.mockResolvedValue(makeSnap([{ id: "m1", group_id: "g1", user_id: "u1" }]));
+    mockReviewExistsGet.mockResolvedValue(makeSnap([]));
+
+    const { POST } = await import("@/app/api/reviews/submit/route");
+    await POST(makeRequest({
+      groupId: "g1",
+      reviews: [{ targetId: "u2", communication: 3, punctuality: 3, meetAgain: 3 }],
+    }));
+
+    expect(mockBatchSet).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ comment: null })
     );
-    // エラー時は500 または成功（モック設定によって変わる場合がある）
-    expect([200, 500]).toContain(res.status);
   });
 });

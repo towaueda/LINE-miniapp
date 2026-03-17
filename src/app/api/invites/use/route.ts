@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { adminDb } from "@/lib/firebase/admin";
 
 export async function POST(request: Request) {
-  // auth と body parsing を並列開始
   const authPromise = authenticateRequest(request);
   const bodyPromise = request.json();
 
@@ -18,29 +17,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "code required" }, { status: 400 });
     }
 
-    const { data: invite } = await supabaseAdmin
-      .from("invite_codes")
-      .select("*")
-      .eq("code", code)
-      .eq("is_active", true)
-      .is("used_by", null)
-      .single();
+    const inviteSnap = await adminDb
+      .collection("invite_codes")
+      .where("code", "==", code)
+      .where("is_active", "==", true)
+      .where("used_by", "==", null)
+      .limit(1)
+      .get();
 
-    if (!invite) {
+    if (inviteSnap.empty) {
       return NextResponse.json({ error: "Invalid or used code" }, { status: 400 });
     }
 
-    const { error } = await supabaseAdmin
-      .from("invite_codes")
-      .update({
-        used_by: user.id,
-        used_at: new Date().toISOString(),
-      })
-      .eq("id", invite.id);
-
-    if (error) {
-      return NextResponse.json({ error: "Failed to use code" }, { status: 500 });
-    }
+    const inviteDoc = inviteSnap.docs[0];
+    await inviteDoc.ref.update({
+      used_by: user.id,
+      used_at: new Date().toISOString(),
+    });
 
     return NextResponse.json({ success: true });
   } catch {

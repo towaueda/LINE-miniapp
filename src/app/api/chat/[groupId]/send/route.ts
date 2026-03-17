@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { adminDb } from "@/lib/firebase/admin";
 import { validateMessageText } from "@/lib/validation";
 
 export async function POST(
   request: Request,
   { params }: { params: { groupId: string } }
 ) {
-  // auth と body parsing を並列開始
   const authPromise = authenticateRequest(request);
   const bodyPromise = request.json();
 
@@ -18,34 +17,30 @@ export async function POST(
 
   const { groupId } = params;
 
-  // メンバーシップ確認 + グループステータス確認（並列）
-  const [{ data: membership }, { data: group }] = await Promise.all([
-    supabaseAdmin
-      .from("match_group_members")
-      .select("id")
-      .eq("group_id", groupId)
-      .eq("user_id", user.id)
-      .single(),
-    supabaseAdmin
-      .from("match_groups")
-      .select("status, date")
-      .eq("id", groupId)
-      .single(),
+  const [membershipSnap, groupDoc] = await Promise.all([
+    adminDb
+      .collection("match_group_members")
+      .where("group_id", "==", groupId)
+      .where("user_id", "==", user.id)
+      .limit(1)
+      .get(),
+    adminDb.collection("match_groups").doc(groupId).get(),
   ]);
 
-  if (!membership) {
+  if (membershipSnap.empty) {
     return NextResponse.json({ error: "このグループのメンバーではありません" }, { status: 403 });
   }
 
-  if (!group) {
+  if (!groupDoc.exists) {
     return NextResponse.json({ error: "グループが見つかりません" }, { status: 404 });
   }
+
+  const group = groupDoc.data()!;
 
   if (group.status === "completed" || group.status === "cancelled") {
     return NextResponse.json({ error: "このグループのチャットは終了しています" }, { status: 403 });
   }
 
-  // マッチ日の23:59（JST）でチャット期限切れ
   const matchDate = new Date(group.date + "T23:59:59+09:00");
   if (Date.now() > matchDate.getTime()) {
     return NextResponse.json({ error: "チャット期限が過ぎています" }, { status: 403 });
@@ -59,23 +54,18 @@ export async function POST(
       return NextResponse.json({ error: textError }, { status: 400 });
     }
 
-    const { data: message, error } = await supabaseAdmin
-      .from("messages")
-      .insert({
-        group_id: groupId,
-        sender_id: user.id,
-        sender_name: user.nickname || "???",
-        text: text.trim(),
-        is_system: false,
-      })
-      .select()
-      .single();
+    const now = new Date().toISOString();
+    const msgRef = await adminDb.collection("messages").add({
+      group_id: groupId,
+      sender_id: user.id,
+      sender_name: user.nickname || "???",
+      text: text.trim(),
+      is_system: false,
+      created_at: now,
+    });
 
-    if (error) {
-      return NextResponse.json({ error: "メッセージの送信に失敗しました" }, { status: 500 });
-    }
-
-    return NextResponse.json({ message });
+    const msgDoc = await msgRef.get();
+    return NextResponse.json({ message: { id: msgDoc.id, ...msgDoc.data() } });
   } catch {
     return NextResponse.json({ error: "サーバーエラーが発生しました" }, { status: 500 });
   }

@@ -50,9 +50,9 @@ function TestConsumer() {
   );
 }
 
-// ── localStorage / sessionStorage のリセット ──────────
+// ── sessionStorage / sessionStorage のリセット ──────────
 beforeEach(() => {
-  localStorage.clear();
+  sessionStorage.clear();
   sessionStorage.clear();
   vi.clearAllMocks();
   // fetch はテストごとに設定
@@ -94,7 +94,7 @@ describe("LiffProvider", () => {
       expect(screen.getByTestId("isLiffMode").textContent).toBe("false");
     });
 
-    it("localStorage にユーザーが保存されている → user が復元される", async () => {
+    it("sessionStorage にユーザーが保存されている → user が復元される", async () => {
       const storedUser = {
         id: "user-stored",
         nickname: "保存ユーザー",
@@ -106,7 +106,7 @@ describe("LiffProvider", () => {
         avatarEmoji: "😀",
         isLoggedIn: true,
       };
-      localStorage.setItem("triangle_user", JSON.stringify(storedUser));
+      sessionStorage.setItem("triangle_user", JSON.stringify(storedUser));
 
       render(
         <LiffProvider>
@@ -118,8 +118,8 @@ describe("LiffProvider", () => {
       expect(screen.getByTestId("userId").textContent).toBe("user-stored");
     });
 
-    it("localStorage が破損している → user は null のまま", async () => {
-      localStorage.setItem("triangle_user", "INVALID_JSON{{{");
+    it("sessionStorage が破損している → user は null のまま", async () => {
+      sessionStorage.setItem("triangle_user", "INVALID_JSON{{{");
 
       render(
         <LiffProvider>
@@ -155,7 +155,7 @@ describe("LiffProvider", () => {
       expect(screen.getByTestId("isLiffMode").textContent).toBe("true");
     });
 
-    it("localStorage に既存ユーザーがある → nickname 等を引き継ぐ", async () => {
+    it("sessionStorage に既存ユーザーがある → nickname 等を引き継ぐ", async () => {
       const existingUser = {
         id: "line-user-1",
         nickname: "既存ニックネーム",
@@ -167,7 +167,7 @@ describe("LiffProvider", () => {
         avatarEmoji: "🐱",
         isLoggedIn: true,
       };
-      localStorage.setItem("triangle_user", JSON.stringify(existingUser));
+      sessionStorage.setItem("triangle_user", JSON.stringify(existingUser));
 
       const liff = makeLiffInstance({ isInClient: true });
       mockInitLiff.mockResolvedValue(true);
@@ -186,7 +186,7 @@ describe("LiffProvider", () => {
 
       await waitFor(() => expect(screen.getByTestId("isReady").textContent).toBe("true"));
       // nickname は既存のものを引き継ぐ（LIFF の displayName ではなく）
-      expect(localStorage.getItem("triangle_user")).toContain("既存ニックネーム");
+      expect(sessionStorage.getItem("triangle_user")).toContain("既存ニックネーム");
     });
 
     it("バックエンドログイン成功 → dbUser がセットされる", async () => {
@@ -207,6 +207,49 @@ describe("LiffProvider", () => {
       );
 
       await waitFor(() => expect(screen.getByTestId("dbUserId").textContent).toBe("db-user-2"));
+    });
+
+    it("バックエンドログイン成功 → user 状態も Firestore データで同期される（②修正）", async () => {
+      const liff = makeLiffInstance({ isInClient: true, accessToken: "access-token-sync" });
+      mockInitLiff.mockResolvedValue(true);
+      mockGetLiff.mockReturnValue(liff);
+      // LIFF プロフィール（area/industry なし）
+      mockGetLiffProfile.mockResolvedValue({ userId: "line-user-sync", displayName: "表示名" });
+      // バックエンドから Firestore のデータが返ってくる
+      vi.mocked(fetch).mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          user: {
+            id: "db-sync",
+            nickname: "登録済みニックネーム",
+            birth_year: 1998,
+            area: "namba",
+            industry: "finance",
+            company: "株式会社テスト",
+            bio: "よろしく",
+            avatar_emoji: "🐱",
+            is_approved: true,
+            is_banned: false,
+          },
+        }),
+      } as Response);
+
+      render(
+        <LiffProvider>
+          <TestConsumer />
+        </LiffProvider>
+      );
+
+      await waitFor(() => expect(screen.getByTestId("isReady").textContent).toBe("true"));
+
+      // sessionStorage の user 状態が Firestore の値で更新されていることを確認
+      const stored = sessionStorage.getItem("triangle_user");
+      expect(stored).not.toBeNull();
+      const parsed = JSON.parse(stored!);
+      expect(parsed.area).toBe("namba");
+      expect(parsed.industry).toBe("finance");
+      expect(parsed.nickname).toBe("登録済みニックネーム");
     });
 
     it("バックエンドログイン 4xx → リトライせず break", async () => {
@@ -312,12 +355,12 @@ describe("LiffProvider", () => {
     it("logout → user と dbUser がクリアされる", async () => {
       mockInitLiff.mockResolvedValue(false);
 
-      // localStorage にユーザーをセット
+      // sessionStorage にユーザーをセット
       const storedUser = {
         id: "u1", nickname: "テスト", birthYear: 2000,
         area: "tokyo", industry: "IT", company: "", bio: "", avatarEmoji: "🐶", isLoggedIn: true,
       };
-      localStorage.setItem("triangle_user", JSON.stringify(storedUser));
+      sessionStorage.setItem("triangle_user", JSON.stringify(storedUser));
 
       render(
         <LiffProvider>
@@ -334,14 +377,14 @@ describe("LiffProvider", () => {
 
       expect(screen.getByTestId("userId").textContent).toBe("null");
       expect(screen.getByTestId("dbUserId").textContent).toBe("null");
-      expect(localStorage.getItem("triangle_user")).toBeNull();
+      expect(sessionStorage.getItem("triangle_user")).toBeNull();
     });
 
     it("logout → triangle_match / triangle_chat / triangle_review_done も削除される", async () => {
       mockInitLiff.mockResolvedValue(false);
-      localStorage.setItem("triangle_match", "data");
-      localStorage.setItem("triangle_chat", "data");
-      localStorage.setItem("triangle_review_done", "data");
+      sessionStorage.setItem("triangle_match", "data");
+      sessionStorage.setItem("triangle_chat", "data");
+      sessionStorage.setItem("triangle_review_done", "data");
 
       render(
         <LiffProvider>
@@ -355,9 +398,9 @@ describe("LiffProvider", () => {
         screen.getByRole("button", { name: "logout" }).click();
       });
 
-      expect(localStorage.getItem("triangle_match")).toBeNull();
-      expect(localStorage.getItem("triangle_chat")).toBeNull();
-      expect(localStorage.getItem("triangle_review_done")).toBeNull();
+      expect(sessionStorage.getItem("triangle_match")).toBeNull();
+      expect(sessionStorage.getItem("triangle_chat")).toBeNull();
+      expect(sessionStorage.getItem("triangle_review_done")).toBeNull();
     });
 
     it("LIFF モードで isLoggedIn=true → liff.logout() が呼ばれる", async () => {

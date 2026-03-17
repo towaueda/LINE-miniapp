@@ -101,7 +101,21 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
                   });
                   if (res.ok) {
                     const data = await res.json();
-                    setDbUserState(data.user);
+                    const backendUser = data.user as DbUser;
+                    setDbUserState(backendUser);
+                    // Firestoreのデータでuser状態も更新（別デバイス・再ログイン時の同期）
+                    const syncedUser: UserProfile = {
+                      ...liffUser,
+                      nickname: backendUser.nickname ?? liffUser.nickname,
+                      birthYear: backendUser.birth_year ?? liffUser.birthYear,
+                      area: backendUser.area ?? "",
+                      industry: backendUser.industry ?? "",
+                      company: backendUser.company ?? "",
+                      bio: backendUser.bio ?? "",
+                      avatarEmoji: backendUser.avatar_emoji ?? liffUser.avatarEmoji,
+                    };
+                    setUserState(syncedUser);
+                    saveUser(syncedUser);
                     sessionStorage.removeItem("triangle_invite_code");
                     break;
                   }

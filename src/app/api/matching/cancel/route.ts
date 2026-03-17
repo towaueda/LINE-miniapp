@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { adminDb } from "@/lib/firebase/admin";
 
 export async function POST(request: Request) {
   const user = await authenticateRequest(request);
@@ -9,15 +9,21 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { error } = await supabaseAdmin
-      .from("match_requests")
-      .update({ status: "cancelled" })
-      .eq("user_id", user.id)
-      .eq("status", "waiting");
+    const snap = await adminDb
+      .collection("match_requests")
+      .where("user_id", "==", user.id)
+      .where("status", "==", "waiting")
+      .get();
 
-    if (error) {
-      return NextResponse.json({ error: "Failed to cancel" }, { status: 500 });
+    if (snap.empty) {
+      return NextResponse.json({ success: true });
     }
+
+    const batch = adminDb.batch();
+    snap.docs.forEach((doc) => {
+      batch.update(doc.ref, { status: "cancelled", updated_at: new Date().toISOString() });
+    });
+    await batch.commit();
 
     return NextResponse.json({ success: true });
   } catch {

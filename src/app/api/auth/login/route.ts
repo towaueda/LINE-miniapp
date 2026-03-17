@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyLineToken, getOrCreateUser } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { adminDb } from "@/lib/firebase/admin";
 import { createHash } from "crypto";
 
 function verifyInviteCode(code: string): boolean {
@@ -29,15 +29,44 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Account is banned" }, { status: 403 });
     }
 
-    // If invite code provided and user not yet approved, validate via hash
     if (inviteCode && !user.is_approved) {
-      if (verifyInviteCode(inviteCode.trim())) {
-        await supabaseAdmin
-          .from("users")
-          .update({ is_approved: true, invited_by_code: "master" })
-          .eq("id", user.id);
+      const trimmedCode = inviteCode.trim();
 
+      // マスターコードをチェック
+      if (verifyInviteCode(trimmedCode)) {
+        await adminDb.collection("users").doc(user.id).update({
+          is_approved: true,
+          invited_by_code: "master",
+          updated_at: new Date().toISOString(),
+        });
         const updatedUser = { ...user, is_approved: true, invited_by_code: "master" };
+        return NextResponse.json({ user: updatedUser });
+      }
+
+      // ユーザー生成招待コード（TRI-XXXXXX）をチェック
+      const inviteSnap = await adminDb
+        .collection("invite_codes")
+        .where("code", "==", trimmedCode)
+        .where("is_active", "==", true)
+        .where("used_by", "==", null)
+        .limit(1)
+        .get();
+
+      if (!inviteSnap.empty) {
+        const inviteDoc = inviteSnap.docs[0];
+        const now = new Date().toISOString();
+        await Promise.all([
+          adminDb.collection("users").doc(user.id).update({
+            is_approved: true,
+            invited_by_code: trimmedCode,
+            updated_at: now,
+          }),
+          inviteDoc.ref.update({
+            used_by: user.id,
+            used_at: now,
+          }),
+        ]);
+        const updatedUser = { ...user, is_approved: true, invited_by_code: trimmedCode };
         return NextResponse.json({ user: updatedUser });
       }
     }

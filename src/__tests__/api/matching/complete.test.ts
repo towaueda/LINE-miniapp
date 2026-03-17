@@ -1,122 +1,138 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { POST } from "@/app/api/matching/complete/route";
-import { createPostRequest, makeDbUser, createQueryBuilder } from "../../helpers/supabaseMock";
 
-vi.mock("@/lib/auth", () => ({ authenticateRequest: vi.fn() }));
-vi.mock("@/lib/supabase/server", () => ({
-  supabaseAdmin: { from: vi.fn() },
+// ── モック ────────────────────────────────────────────
+const mockAuthenticateRequest = vi.fn();
+vi.mock("@/lib/auth", () => ({
+  authenticateRequest: (...args: unknown[]) => mockAuthenticateRequest(...args),
 }));
 
-import { authenticateRequest } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
+const mockMembersGet = vi.fn();
+const mockMemberUpdate = vi.fn().mockResolvedValue(undefined);
+const mockGroupUpdate = vi.fn().mockResolvedValue(undefined);
 
-const validUser = makeDbUser();
-const GROUP_ID = "group-uuid-1";
+vi.mock("@/lib/firebase/admin", () => ({
+  adminDb: {
+    collection: vi.fn((col: string) => {
+      if (col === "match_group_members") {
+        return {
+          where: vi.fn().mockReturnThis(),
+          get: mockMembersGet,
+          doc: vi.fn(() => ({ update: mockMemberUpdate })),
+        };
+      }
+      if (col === "match_groups") {
+        return { doc: vi.fn(() => ({ update: mockGroupUpdate })) };
+      }
+      return {};
+    }),
+  },
+}));
+
+function makeRequest(body: object) {
+  return new Request("http://localhost/api/matching/complete", {
+    method: "POST",
+    headers: { Authorization: "Bearer token", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+function makeMembersSnap(members: Array<{ id: string; user_id: string; completed_at: string | null }>) {
+  return {
+    empty: members.length === 0,
+    docs: members.map((m) => ({
+      id: m.id,
+      data: () => m,
+    })),
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockMemberUpdate.mockResolvedValue(undefined);
+  mockGroupUpdate.mockResolvedValue(undefined);
+});
 
 describe("POST /api/matching/complete", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(authenticateRequest).mockResolvedValue(validUser as never);
-  });
-
   it("未認証 → 401", async () => {
-    vi.mocked(authenticateRequest).mockResolvedValue(null);
-    const res = await POST(createPostRequest({ groupId: GROUP_ID }));
+    mockAuthenticateRequest.mockResolvedValue(null);
+    const { POST } = await import("@/app/api/matching/complete/route");
+    const res = await POST(makeRequest({ groupId: "g1" }));
     expect(res.status).toBe(401);
   });
 
   it("groupId なし → 400", async () => {
-    vi.mocked(supabaseAdmin.from).mockReturnValue(
-      createQueryBuilder({ data: [], error: null }) as never
-    );
-    const res = await POST(createPostRequest({}));
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    const { POST } = await import("@/app/api/matching/complete/route");
+    const res = await POST(makeRequest({}));
     expect(res.status).toBe(400);
   });
 
-  it("メンバーなし（非メンバー）→ 403", async () => {
-    vi.mocked(supabaseAdmin.from).mockReturnValue(
-      createQueryBuilder({ data: [], error: null }) as never
-    );
-    const res = await POST(createPostRequest({ groupId: GROUP_ID }));
+  it("グループのメンバーでない → 403", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockMembersGet.mockResolvedValue(makeMembersSnap([]));
+
+    const { POST } = await import("@/app/api/matching/complete/route");
+    const res = await POST(makeRequest({ groupId: "g1" }));
     expect(res.status).toBe(403);
   });
 
-  it("グループに存在しないユーザー → 403", async () => {
-    const members = [
-      { id: "m1", user_id: "other-user", completed_at: null },
-    ];
-    vi.mocked(supabaseAdmin.from).mockReturnValue(
-      createQueryBuilder({ data: members, error: null }) as never
-    );
-    const res = await POST(createPostRequest({ groupId: GROUP_ID }));
-    expect(res.status).toBe(403);
-  });
-
-  it("自分だけ完了（3人中1人）→ allConfirmed:false", async () => {
-    const members = [
-      { id: "m1", user_id: validUser.id, completed_at: null },
-      { id: "m2", user_id: "user-2", completed_at: null },
-      { id: "m3", user_id: "user-3", completed_at: null },
-    ];
-    let callCount = 0;
-    vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-      callCount++;
-      // 1回目: メンバー取得
-      if (table === "match_group_members" && callCount === 1) {
-        return createQueryBuilder({ data: members, error: null }) as never;
-      }
-      // 2回目以降: update
-      return createQueryBuilder({ data: null, error: null }) as never;
-    });
-
-    const res = await POST(createPostRequest({ groupId: GROUP_ID }));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.allConfirmed).toBe(false);
-    expect(body.confirmed).toBe(1);
-    expect(body.total).toBe(3);
-  });
-
-  it("全員完了 → allConfirmed:true + match_groups を completed に更新", async () => {
-    const members = [
-      { id: "m1", user_id: validUser.id, completed_at: null },
-      { id: "m2", user_id: "user-2", completed_at: "2026-03-20T13:00:00Z" },
-      { id: "m3", user_id: "user-3", completed_at: "2026-03-20T13:00:00Z" },
-    ];
-    const groupUpdateBuilder = createQueryBuilder({ data: null, error: null });
-    const memberUpdateBuilder = createQueryBuilder({ data: null, error: null });
-
-    let callCount = 0;
-    vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-      callCount++;
-      if (table === "match_group_members" && callCount === 1) {
-        return createQueryBuilder({ data: members, error: null }) as never;
-      }
-      if (table === "match_group_members") return memberUpdateBuilder as never;
-      if (table === "match_groups") return groupUpdateBuilder as never;
-      return createQueryBuilder({ data: null, error: null }) as never;
-    });
-
-    const res = await POST(createPostRequest({ groupId: GROUP_ID }));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.allConfirmed).toBe(true);
-    expect(body.confirmed).toBe(3);
-  });
-
-  it("既に completed_at がある場合は重複更新しない", async () => {
-    const members = [
-      { id: "m1", user_id: validUser.id, completed_at: "2026-03-20T12:30:00Z" },
-      { id: "m2", user_id: "user-2", completed_at: null },
-    ];
-    vi.mocked(supabaseAdmin.from).mockReturnValue(
-      createQueryBuilder({ data: members, error: null }) as never
+  it("自分以外がまだ未完了 → confirmed < total を返す", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockMembersGet.mockResolvedValue(
+      makeMembersSnap([
+        { id: "m1", user_id: "u1", completed_at: null },
+        { id: "m2", user_id: "u2", completed_at: null },
+        { id: "m3", user_id: "u3", completed_at: null },
+      ])
     );
 
-    const res = await POST(createPostRequest({ groupId: GROUP_ID }));
+    const { POST } = await import("@/app/api/matching/complete/route");
+    const res = await POST(makeRequest({ groupId: "g1" }));
+
     expect(res.status).toBe(200);
-    // update は呼ばれない（completed_at が既にある）
-    const body = await res.json();
-    expect(body.confirmed).toBe(1);
+    const data = await res.json();
+    expect(data.confirmed).toBe(1);
+    expect(data.total).toBe(3);
+    expect(data.allConfirmed).toBe(false);
+    expect(mockMemberUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ completed_at: expect.any(String) })
+    );
+    expect(mockGroupUpdate).not.toHaveBeenCalled();
+  });
+
+  it("全員完了 → グループを completed に更新・allConfirmed: true", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockMembersGet.mockResolvedValue(
+      makeMembersSnap([
+        { id: "m1", user_id: "u1", completed_at: null },
+        { id: "m2", user_id: "u2", completed_at: "2026-04-03T13:00:00.000Z" },
+        { id: "m3", user_id: "u3", completed_at: "2026-04-03T13:01:00.000Z" },
+      ])
+    );
+
+    const { POST } = await import("@/app/api/matching/complete/route");
+    const res = await POST(makeRequest({ groupId: "g1" }));
+
+    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.allConfirmed).toBe(true);
+    expect(mockGroupUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "completed" })
+    );
+  });
+
+  it("すでに完了済みのメンバー → 二重更新しない", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockMembersGet.mockResolvedValue(
+      makeMembersSnap([
+        { id: "m1", user_id: "u1", completed_at: "2026-04-03T13:00:00.000Z" },
+        { id: "m2", user_id: "u2", completed_at: null },
+      ])
+    );
+
+    const { POST } = await import("@/app/api/matching/complete/route");
+    await POST(makeRequest({ groupId: "g1" }));
+
+    expect(mockMemberUpdate).not.toHaveBeenCalled();
   });
 });

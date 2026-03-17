@@ -1,119 +1,197 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { POST } from "@/app/api/auth/login/route";
-import { createPostRequest, makeDbUser, createQueryBuilder } from "../../helpers/supabaseMock";
 import { createHash } from "crypto";
 
-// モック設定
+// ── 環境変数 ─────────────────────────────────────────
+const MASTER_CODE = "MASTER-TEST-CODE";
+process.env.INVITE_CODE_HASH = createHash("sha256").update(MASTER_CODE).digest("hex");
+
+// ── モック ────────────────────────────────────────────
+const mockVerifyLineToken = vi.fn();
+const mockGetOrCreateUser = vi.fn();
+
 vi.mock("@/lib/auth", () => ({
-  verifyLineToken: vi.fn(),
-  getOrCreateUser: vi.fn(),
+  verifyLineToken: (...args: unknown[]) => mockVerifyLineToken(...args),
+  getOrCreateUser: (...args: unknown[]) => mockGetOrCreateUser(...args),
 }));
 
-vi.mock("@/lib/supabase/server", () => ({
-  supabaseAdmin: {
-    from: vi.fn(),
+const mockDocUpdate = vi.fn().mockResolvedValue(undefined);
+const mockDocRef = { update: mockDocUpdate };
+const mockInviteGet = vi.fn();
+
+vi.mock("@/lib/firebase/admin", () => ({
+  adminDb: {
+    collection: (col: string) => {
+      if (col === "invite_codes") {
+        return {
+          where: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockReturnThis(),
+          get: mockInviteGet,
+        };
+      }
+      // users collection
+      return { doc: vi.fn(() => mockDocRef) };
+    },
   },
 }));
 
-import { verifyLineToken, getOrCreateUser } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
+// ── ヘルパー ──────────────────────────────────────────
+function makeUser(overrides: Partial<{
+  id: string; is_banned: boolean; is_approved: boolean; nickname: string;
+}> = {}) {
+  return {
+    id: overrides.id ?? "db-u1",
+    line_user_id: "line-u1",
+    nickname: overrides.nickname ?? "太郎",
+    is_banned: overrides.is_banned ?? false,
+    is_approved: overrides.is_approved ?? false,
+    invited_by_code: null,
+  };
+}
 
-// テスト用招待コードとそのSHA-256ハッシュ
-const TEST_INVITE_CODE = "TEST-MASTER-CODE";
-const TEST_INVITE_HASH = createHash("sha256").update(TEST_INVITE_CODE).digest("hex");
+function makeRequest(body: object) {
+  return new Request("http://localhost/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockDocUpdate.mockResolvedValue(undefined);
+  mockInviteGet.mockResolvedValue({ empty: true, docs: [] }); // default: code not found
+});
 
 describe("POST /api/auth/login", () => {
-  const mockUser = makeDbUser({ is_approved: false });
+  // ─── 認証失敗 ────────────────────────────────────
+  describe("認証失敗", () => {
+    it("accessToken なし → 400", async () => {
+      const { POST } = await import("@/app/api/auth/login/route");
+      const res = await POST(makeRequest({}));
+      expect(res.status).toBe(400);
+    });
 
-  beforeEach(() => {
-    vi.clearAllMocks();
-    process.env.INVITE_CODE_HASH = TEST_INVITE_HASH;
+    it("LINE トークン無効 → 401", async () => {
+      mockVerifyLineToken.mockResolvedValue(null);
+      const { POST } = await import("@/app/api/auth/login/route");
+      const res = await POST(makeRequest({ accessToken: "bad-token" }));
+      expect(res.status).toBe(401);
+    });
+
+    it("BAN されたユーザー → 403", async () => {
+      mockVerifyLineToken.mockResolvedValue({ userId: "line-u1", displayName: "太郎" });
+      mockGetOrCreateUser.mockResolvedValue(makeUser({ is_banned: true }));
+
+      const { POST } = await import("@/app/api/auth/login/route");
+      const res = await POST(makeRequest({ accessToken: "valid-token" }));
+
+      expect(res.status).toBe(403);
+      const data = await res.json();
+      expect(data.error).toMatch(/banned/i);
+    });
   });
 
-  // ─── 認証エラー ───────────────────────────────
-  it("accessToken なし → 400", async () => {
-    const req = createPostRequest({ inviteCode: "code" });
-    const res = await POST(req);
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error).toMatch(/accessToken/);
+  // ─── 正常ログイン ────────────────────────────────
+  describe("正常ログイン", () => {
+    it("既存ユーザー → user を返す", async () => {
+      mockVerifyLineToken.mockResolvedValue({ userId: "line-u1", displayName: "太郎" });
+      mockGetOrCreateUser.mockResolvedValue(makeUser({ is_approved: true }));
+
+      const { POST } = await import("@/app/api/auth/login/route");
+      const res = await POST(makeRequest({ accessToken: "valid-token" }));
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.user.id).toBe("db-u1");
+    });
+
+    it("ユーザー作成失敗 → 500", async () => {
+      mockVerifyLineToken.mockResolvedValue({ userId: "line-u1", displayName: "太郎" });
+      mockGetOrCreateUser.mockResolvedValue(null);
+
+      const { POST } = await import("@/app/api/auth/login/route");
+      const res = await POST(makeRequest({ accessToken: "valid-token" }));
+
+      expect(res.status).toBe(500);
+    });
   });
 
-  it("無効な LINE トークン → 401", async () => {
-    vi.mocked(verifyLineToken).mockResolvedValue(null);
-    const req = createPostRequest({ accessToken: "bad-token" });
-    const res = await POST(req);
-    expect(res.status).toBe(401);
+  // ─── マスター招待コード ──────────────────────────
+  describe("マスター招待コードによる承認", () => {
+    it("有効なマスターコード → is_approved: true で返す", async () => {
+      mockVerifyLineToken.mockResolvedValue({ userId: "line-u1", displayName: "太郎" });
+      mockGetOrCreateUser.mockResolvedValue(makeUser({ is_approved: false }));
+
+      const { POST } = await import("@/app/api/auth/login/route");
+      const res = await POST(makeRequest({ accessToken: "valid-token", inviteCode: MASTER_CODE }));
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.user.is_approved).toBe(true);
+      expect(data.user.invited_by_code).toBe("master");
+      expect(mockDocUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ is_approved: true, invited_by_code: "master" })
+      );
+    });
+
+    it("無効なマスターコード → is_approved: false のまま", async () => {
+      mockVerifyLineToken.mockResolvedValue({ userId: "line-u1", displayName: "太郎" });
+      mockGetOrCreateUser.mockResolvedValue(makeUser({ is_approved: false }));
+
+      const { POST } = await import("@/app/api/auth/login/route");
+      const res = await POST(makeRequest({ accessToken: "valid-token", inviteCode: "WRONG-CODE" }));
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.user.is_approved).toBe(false);
+    });
+
+    it("すでに承認済み → コードチェックをスキップ", async () => {
+      mockVerifyLineToken.mockResolvedValue({ userId: "line-u1", displayName: "太郎" });
+      mockGetOrCreateUser.mockResolvedValue(makeUser({ is_approved: true }));
+
+      const { POST } = await import("@/app/api/auth/login/route");
+      const res = await POST(makeRequest({ accessToken: "valid-token", inviteCode: MASTER_CODE }));
+
+      expect(res.status).toBe(200);
+      expect(mockDocUpdate).not.toHaveBeenCalled();
+    });
   });
 
-  it("ユーザー作成失敗（DB エラー）→ 500", async () => {
-    vi.mocked(verifyLineToken).mockResolvedValue({ userId: "Uline1", displayName: "テスト" });
-    vi.mocked(getOrCreateUser).mockResolvedValue(null);
-    const req = createPostRequest({ accessToken: "valid-token" });
-    const res = await POST(req);
-    expect(res.status).toBe(500);
-  });
+  // ─── ユーザー生成招待コード ──────────────────────
+  describe("ユーザー生成招待コード（TRI-XXXXXX）による承認", () => {
+    it("有効な Firestore コード → is_approved: true で返す・コードを使用済みに", async () => {
+      mockVerifyLineToken.mockResolvedValue({ userId: "line-u1", displayName: "太郎" });
+      mockGetOrCreateUser.mockResolvedValue(makeUser({ is_approved: false }));
 
-  it("BAN されたユーザー → 403", async () => {
-    vi.mocked(verifyLineToken).mockResolvedValue({ userId: "Uline1", displayName: "テスト" });
-    vi.mocked(getOrCreateUser).mockResolvedValue(makeDbUser({ is_banned: true }) as never);
-    const req = createPostRequest({ accessToken: "valid-token" });
-    const res = await POST(req);
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.error).toMatch(/banned/);
-  });
+      const mockInviteDocUpdate = vi.fn().mockResolvedValue(undefined);
+      mockInviteGet.mockResolvedValueOnce({
+        empty: false,
+        docs: [{ ref: { update: mockInviteDocUpdate } }],
+      });
 
-  // ─── 正常系 ───────────────────────────────────
-  it("正常: 新規ユーザー → 200 + user 返却", async () => {
-    vi.mocked(verifyLineToken).mockResolvedValue({ userId: "Uline1", displayName: "テスト" });
-    vi.mocked(getOrCreateUser).mockResolvedValue(mockUser as never);
-    const req = createPostRequest({ accessToken: "valid-token" });
-    const res = await POST(req);
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.user).toBeDefined();
-    expect(body.user.id).toBe(mockUser.id);
-  });
+      const { POST } = await import("@/app/api/auth/login/route");
+      const res = await POST(makeRequest({ accessToken: "valid-token", inviteCode: "TRI-ABCDEF" }));
 
-  it("既存ユーザー（承認済み）→ 200 + user 返却（招待コードを再検証しない）", async () => {
-    const approvedUser = makeDbUser({ is_approved: true });
-    vi.mocked(verifyLineToken).mockResolvedValue({ userId: "Uline1", displayName: "テスト" });
-    vi.mocked(getOrCreateUser).mockResolvedValue(approvedUser as never);
-    const req = createPostRequest({ accessToken: "valid-token", inviteCode: "some-code" });
-    const res = await POST(req);
-    expect(res.status).toBe(200);
-    // DB update が呼ばれないことを確認
-    expect(supabaseAdmin.from).not.toHaveBeenCalled();
-  });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.user.is_approved).toBe(true);
+      expect(mockInviteDocUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ used_by: "db-u1" })
+      );
+    });
 
-  // ─── 招待コード検証 ───────────────────────────
-  it("ハッシュが一致する招待コード + 未承認 → is_approved=true に更新して返す", async () => {
-    vi.mocked(verifyLineToken).mockResolvedValue({ userId: "Uline1", displayName: "テスト" });
-    vi.mocked(getOrCreateUser).mockResolvedValue(mockUser as never);
+    it("存在しない Firestore コード → is_approved: false のまま", async () => {
+      mockVerifyLineToken.mockResolvedValue({ userId: "line-u1", displayName: "太郎" });
+      mockGetOrCreateUser.mockResolvedValue(makeUser({ is_approved: false }));
+      // mockInviteGet は beforeEach で { empty: true } を返すデフォルト設定済み
 
-    const builder = createQueryBuilder({ data: null, error: null });
-    vi.mocked(supabaseAdmin.from).mockReturnValue(builder as never);
+      const { POST } = await import("@/app/api/auth/login/route");
+      const res = await POST(makeRequest({ accessToken: "valid-token", inviteCode: "TRI-INVALID" }));
 
-    const req = createPostRequest({ accessToken: "valid-token", inviteCode: TEST_INVITE_CODE });
-    const res = await POST(req);
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.user.is_approved).toBe(true);
-    // DBのupdateが呼ばれたことを確認
-    expect(supabaseAdmin.from).toHaveBeenCalledWith("users");
-  });
-
-  it("ハッシュが不一致の招待コード → is_approved 更新なし", async () => {
-    vi.mocked(verifyLineToken).mockResolvedValue({ userId: "Uline1", displayName: "テスト" });
-    vi.mocked(getOrCreateUser).mockResolvedValue(mockUser as never);
-
-    const req = createPostRequest({ accessToken: "valid-token", inviteCode: "WRONG-CODE" });
-    const res = await POST(req);
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    // is_approved は変わらず false のまま
-    expect(body.user.is_approved).toBe(false);
-    expect(supabaseAdmin.from).not.toHaveBeenCalled();
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.user.is_approved).toBe(false);
+    });
   });
 });

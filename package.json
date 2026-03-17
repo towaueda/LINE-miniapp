@@ -13,12 +13,11 @@
   },
   "dependencies": {
     "@line/liff": "^2.27.3",
-    "@supabase/ssr": "^0.8.0",
-    "@supabase/supabase-js": "^2.95.3",
+    "firebase": "^12.10.0",
+    "firebase-admin": "^13.7.0",
     "next": "14.2.35",
     "react": "^18",
-    "react-dom": "^18",
-    "uuid": "^13.0.0"
+    "react-dom": "^18"
   },
   "devDependencies": {
     "@testing-library/jest-dom": "^6.4.0",
@@ -27,7 +26,6 @@
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",
-    "@types/uuid": "^10.0.0",
     "@vitejs/plugin-react": "^6.0.1",
     "@vitest/coverage-v8": "^4.1.0",
     "eslint": "^8",

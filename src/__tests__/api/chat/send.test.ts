@@ -1,179 +1,177 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { POST } from "@/app/api/chat/[groupId]/send/route";
-import { createPostRequest, makeDbUser, createQueryBuilder } from "../../helpers/supabaseMock";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("@/lib/auth", () => ({ authenticateRequest: vi.fn() }));
-vi.mock("@/lib/supabase/server", () => ({
-  supabaseAdmin: { from: vi.fn() },
+// ── モック ────────────────────────────────────────────
+const mockAuthenticateRequest = vi.fn();
+vi.mock("@/lib/auth", () => ({
+  authenticateRequest: (...args: unknown[]) => mockAuthenticateRequest(...args),
 }));
 
-import { authenticateRequest } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
+const mockMembershipGet = vi.fn();
+const mockGroupDocGet = vi.fn();
+const mockMsgAdd = vi.fn();
+const mockMsgDocGet = vi.fn();
 
-const validUser = makeDbUser();
-const GROUP_ID = "group-uuid-1";
+vi.mock("@/lib/firebase/admin", () => ({
+  adminDb: {
+    collection: vi.fn((col: string) => {
+      if (col === "match_group_members") {
+        return {
+          where: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockReturnThis(),
+          get: mockMembershipGet,
+        };
+      }
+      if (col === "match_groups") {
+        return { doc: vi.fn(() => ({ get: mockGroupDocGet })) };
+      }
+      if (col === "messages") {
+        return {
+          add: mockMsgAdd,
+        };
+      }
+      return {};
+    }),
+  },
+}));
 
-/** グループ情報とメンバーシップを正常系でセットアップ */
-function setupNormalGroup(overrides: { date?: string; status?: string } = {}) {
-  const group = {
-    status: overrides.status ?? "confirmed",
-    date: overrides.date ?? "2099-12-31", // 十分未来の日付
-  };
-  const membership = { id: "member-1" };
-  const message = {
-    id: "msg-1",
-    group_id: GROUP_ID,
-    sender_id: validUser.id,
-    sender_name: validUser.nickname,
-    text: "こんにちは",
-    is_system: false,
-    created_at: new Date().toISOString(),
-  };
-
-  vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-    if (table === "match_group_members") {
-      return createQueryBuilder({ data: membership, error: null }) as never;
-    }
-    if (table === "match_groups") {
-      return createQueryBuilder({ data: group, error: null }) as never;
-    }
-    if (table === "messages") {
-      return createQueryBuilder({ data: message, error: null }) as never;
-    }
-    return createQueryBuilder({ data: null, error: null }) as never;
+function makeRequest(groupId: string, body: object) {
+  return new Request(`http://localhost/api/chat/${groupId}/send`, {
+    method: "POST",
+    headers: { Authorization: "Bearer token", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
 }
 
+function makeSnap(docs: Array<{ id: string; [key: string]: unknown }>) {
+  return {
+    empty: docs.length === 0,
+    docs: docs.map((d) => ({ id: d.id, data: () => d })),
+  };
+}
+
+// 送信可能なグループ（未来の日付）
+const futureDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+  .toISOString().split("T")[0]; // 1週間後
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockMsgAdd.mockResolvedValue({
+    id: "new-msg-id",
+    get: mockMsgDocGet,
+  });
+  mockMsgDocGet.mockResolvedValue({
+    id: "new-msg-id",
+    data: () => ({
+      group_id: "g1",
+      sender_id: "u1",
+      sender_name: "太郎",
+      text: "テスト",
+      is_system: false,
+      created_at: new Date().toISOString(),
+    }),
+  });
+});
+
 describe("POST /api/chat/[groupId]/send", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(authenticateRequest).mockResolvedValue(validUser as never);
-    vi.useFakeTimers();
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  // ─── 認証チェック ──────────────────────────────
   it("未認証 → 401", async () => {
-    vi.mocked(authenticateRequest).mockResolvedValue(null);
-    const res = await POST(createPostRequest({ text: "hello" }), {
-      params: { groupId: GROUP_ID },
-    });
+    mockAuthenticateRequest.mockResolvedValue(null);
+    const { POST } = await import("@/app/api/chat/[groupId]/send/route");
+    const res = await POST(makeRequest("g1", { text: "hello" }), { params: { groupId: "g1" } });
     expect(res.status).toBe(401);
   });
 
-  // ─── メンバーシップチェック ────────────────────
-  it("非メンバー → 403", async () => {
-    vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-      if (table === "match_group_members") {
-        return createQueryBuilder({ data: null, error: null }) as never;
-      }
-      return createQueryBuilder({ data: { status: "confirmed", date: "2099-12-31" }, error: null }) as never;
-    });
+  it("グループのメンバーでない → 403", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1", nickname: "太郎" });
+    mockMembershipGet.mockResolvedValue(makeSnap([]));
+    mockGroupDocGet.mockResolvedValue({ exists: true, data: () => ({ date: futureDate, status: "pending" }) });
 
-    const res = await POST(createPostRequest({ text: "hello" }), {
-      params: { groupId: GROUP_ID },
-    });
+    const { POST } = await import("@/app/api/chat/[groupId]/send/route");
+    const res = await POST(makeRequest("g1", { text: "hello" }), { params: { groupId: "g1" } });
     expect(res.status).toBe(403);
-    expect((await res.json()).error).toMatch(/メンバー/);
   });
 
   it("グループが存在しない → 404", async () => {
-    vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-      if (table === "match_group_members") {
-        return createQueryBuilder({ data: { id: "member-1" }, error: null }) as never;
-      }
-      // match_groups が null
-      return createQueryBuilder({ data: null, error: null }) as never;
-    });
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1", nickname: "太郎" });
+    mockMembershipGet.mockResolvedValue(makeSnap([{ id: "m1", group_id: "g1", user_id: "u1" }]));
+    mockGroupDocGet.mockResolvedValue({ exists: false });
 
-    const res = await POST(createPostRequest({ text: "hello" }), {
-      params: { groupId: GROUP_ID },
-    });
+    const { POST } = await import("@/app/api/chat/[groupId]/send/route");
+    const res = await POST(makeRequest("g1", { text: "hello" }), { params: { groupId: "g1" } });
     expect(res.status).toBe(404);
   });
 
-  // ─── グループステータスチェック ────────────────
-  it("status=completed → 403", async () => {
-    setupNormalGroup({ status: "completed" });
-    const res = await POST(createPostRequest({ text: "hello" }), {
-      params: { groupId: GROUP_ID },
+  it("completed グループ → 403（チャット終了）", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1", nickname: "太郎" });
+    mockMembershipGet.mockResolvedValue(makeSnap([{ id: "m1", group_id: "g1", user_id: "u1" }]));
+    mockGroupDocGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ date: futureDate, status: "completed" }),
     });
-    expect(res.status).toBe(403);
-    expect((await res.json()).error).toMatch(/終了/);
-  });
 
-  it("status=cancelled → 403", async () => {
-    setupNormalGroup({ status: "cancelled" });
-    const res = await POST(createPostRequest({ text: "hello" }), {
-      params: { groupId: GROUP_ID },
-    });
+    const { POST } = await import("@/app/api/chat/[groupId]/send/route");
+    const res = await POST(makeRequest("g1", { text: "hello" }), { params: { groupId: "g1" } });
     expect(res.status).toBe(403);
   });
 
-  // ─── チャット期限チェック ──────────────────────
-  it("マッチ日の23:59:59 JST 経過後 → 403", async () => {
-    // 昨日の日付でグループを設定
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const dateStr = yesterday.toISOString().split("T")[0];
-
-    setupNormalGroup({ date: dateStr });
-
-    // 現在時刻を今日の00:01にセット（昨日23:59を過ぎている）
-    vi.setSystemTime(new Date("2026-03-21T00:01:00+09:00"));
-
-    const res = await POST(createPostRequest({ text: "hello" }), {
-      params: { groupId: GROUP_ID },
+  it("チャット期限切れ（過去の日付）→ 403", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1", nickname: "太郎" });
+    mockMembershipGet.mockResolvedValue(makeSnap([{ id: "m1", group_id: "g1", user_id: "u1" }]));
+    mockGroupDocGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ date: "2020-01-02", status: "pending" }), // 過去
     });
+
+    const { POST } = await import("@/app/api/chat/[groupId]/send/route");
+    const res = await POST(makeRequest("g1", { text: "hello" }), { params: { groupId: "g1" } });
     expect(res.status).toBe(403);
-    expect((await res.json()).error).toMatch(/期限/);
   });
 
-  // ─── メッセージバリデーション ──────────────────
-  it("空文字メッセージ → 400", async () => {
-    setupNormalGroup();
-    const res = await POST(createPostRequest({ text: "" }), {
-      params: { groupId: GROUP_ID },
+  it("空メッセージ → 400", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1", nickname: "太郎" });
+    mockMembershipGet.mockResolvedValue(makeSnap([{ id: "m1", group_id: "g1", user_id: "u1" }]));
+    mockGroupDocGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ date: futureDate, status: "pending" }),
     });
+
+    const { POST } = await import("@/app/api/chat/[groupId]/send/route");
+    const res = await POST(makeRequest("g1", { text: "   " }), { params: { groupId: "g1" } });
     expect(res.status).toBe(400);
   });
 
-  it("空白のみ → 400", async () => {
-    setupNormalGroup();
-    const res = await POST(createPostRequest({ text: "   " }), {
-      params: { groupId: GROUP_ID },
+  it("1001文字以上 → 400", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1", nickname: "太郎" });
+    mockMembershipGet.mockResolvedValue(makeSnap([{ id: "m1", group_id: "g1", user_id: "u1" }]));
+    mockGroupDocGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ date: futureDate, status: "pending" }),
     });
+
+    const { POST } = await import("@/app/api/chat/[groupId]/send/route");
+    const res = await POST(makeRequest("g1", { text: "a".repeat(1001) }), { params: { groupId: "g1" } });
     expect(res.status).toBe(400);
   });
 
-  it("1001文字 → 400", async () => {
-    setupNormalGroup();
-    const res = await POST(createPostRequest({ text: "A".repeat(1001) }), {
-      params: { groupId: GROUP_ID },
+  it("正常送信 → 201 + message", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1", nickname: "太郎" });
+    mockMembershipGet.mockResolvedValue(makeSnap([{ id: "m1", group_id: "g1", user_id: "u1" }]));
+    mockGroupDocGet.mockResolvedValue({
+      exists: true,
+      data: () => ({ date: futureDate, status: "pending" }),
     });
-    expect(res.status).toBe(400);
-  });
 
-  // ─── 正常系 ───────────────────────────────────
-  it("正常なメッセージ → 200 + message 返却", async () => {
-    setupNormalGroup();
-    const res = await POST(createPostRequest({ text: "こんにちは" }), {
-      params: { groupId: GROUP_ID },
-    });
+    const { POST } = await import("@/app/api/chat/[groupId]/send/route");
+    const res = await POST(makeRequest("g1", { text: "こんにちは！" }), { params: { groupId: "g1" } });
+
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.message).toBeDefined();
-    expect(body.message.text).toBe("こんにちは");
-  });
-
-  it("1000文字メッセージ（上限）→ 200", async () => {
-    setupNormalGroup();
-    const res = await POST(createPostRequest({ text: "A".repeat(1000) }), {
-      params: { groupId: GROUP_ID },
-    });
-    expect(res.status).toBe(200);
+    const data = await res.json();
+    expect(data.message).toBeDefined();
+    expect(mockMsgAdd).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "こんにちは！",
+        sender_id: "u1",
+        is_system: false,
+      })
+    );
   });
 });

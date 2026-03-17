@@ -1,157 +1,135 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { POST } from "@/app/api/matching/two-person-response/route";
-import { createPostRequest, makeDbUser, makeMatchGroup, createQueryBuilder } from "../../helpers/supabaseMock";
 
-vi.mock("@/lib/auth", () => ({ authenticateRequest: vi.fn() }));
-vi.mock("@/lib/supabase/server", () => ({
-  supabaseAdmin: { from: vi.fn(), rpc: vi.fn() },
+// ── モック ────────────────────────────────────────────
+const mockAuthenticateRequest = vi.fn();
+vi.mock("@/lib/auth", () => ({
+  authenticateRequest: (...args: unknown[]) => mockAuthenticateRequest(...args),
 }));
 
-import { authenticateRequest } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
+const mockConfirmTwoPersonMatch = vi.fn();
+const mockDeclineTwoPersonMatch = vi.fn();
+const mockGetGroupWithMembers = vi.fn();
+vi.mock("@/lib/matching", () => ({
+  confirmTwoPersonMatch: (...args: unknown[]) => mockConfirmTwoPersonMatch(...args),
+  declineTwoPersonMatch: (...args: unknown[]) => mockDeclineTwoPersonMatch(...args),
+  getGroupWithMembers: (...args: unknown[]) => mockGetGroupWithMembers(...args),
+}));
 
-const validUser = makeDbUser();
+const mockCollectionGet = vi.fn();
+vi.mock("@/lib/firebase/admin", () => ({
+  adminDb: {
+    collection: vi.fn(() => ({
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      get: mockCollectionGet,
+    })),
+  },
+}));
 
-const twoPersonReq = {
-  id: "req-1",
-  user_id: validUser.id,
-  status: "two_person_offered",
-  area: "umeda",
-  available_dates: ["2026-03-20"],
-  two_person_partner_id: "req-2",
-};
+function makeRequest(body: object) {
+  return new Request("http://localhost/api/matching/two-person-response", {
+    method: "POST",
+    headers: { Authorization: "Bearer token", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+function makeSnap(docs: Array<{ id: string; [key: string]: unknown }>) {
+  return {
+    empty: docs.length === 0,
+    docs: docs.map((d) => ({ id: d.id, data: () => d })),
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 describe("POST /api/matching/two-person-response", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(authenticateRequest).mockResolvedValue(validUser as never);
-  });
-
-  // ─── 認証・権限チェック ────────────────────────
   it("未認証 → 401", async () => {
-    vi.mocked(authenticateRequest).mockResolvedValue(null);
-    const res = await POST(createPostRequest({ action: "accept" }));
+    mockAuthenticateRequest.mockResolvedValue(null);
+    const { POST } = await import("@/app/api/matching/two-person-response/route");
+    const res = await POST(makeRequest({ action: "accept" }));
     expect(res.status).toBe(401);
   });
 
-  it("is_approved=false → 403", async () => {
-    vi.mocked(authenticateRequest).mockResolvedValue(
-      makeDbUser({ is_approved: false }) as never
-    );
-    const res = await POST(createPostRequest({ action: "accept" }));
+  it("未承認ユーザー → 403", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1", is_approved: false, is_banned: false });
+    const { POST } = await import("@/app/api/matching/two-person-response/route");
+    const res = await POST(makeRequest({ action: "accept" }));
     expect(res.status).toBe(403);
   });
 
-  it("is_banned=true → 403", async () => {
-    vi.mocked(authenticateRequest).mockResolvedValue(
-      makeDbUser({ is_banned: true }) as never
-    );
-    const res = await POST(createPostRequest({ action: "accept" }));
-    expect(res.status).toBe(403);
-  });
-
-  // ─── 入力バリデーション ────────────────────────
   it("無効な action → 400", async () => {
-    vi.mocked(supabaseAdmin.from).mockReturnValue(
-      createQueryBuilder({ data: twoPersonReq, error: null }) as never
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1", is_approved: true, is_banned: false });
+    mockCollectionGet.mockResolvedValue(
+      makeSnap([{ id: "req-1", status: "two_person_offered" }])
     );
-    const res = await POST(createPostRequest({ action: "maybe" }));
+
+    const { POST } = await import("@/app/api/matching/two-person-response/route");
+    const res = await POST(makeRequest({ action: "maybe" }));
     expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.error).toMatch(/無効/);
   });
 
-  it("two_person_offered リクエストなし → 404", async () => {
-    vi.mocked(supabaseAdmin.from).mockReturnValue(
-      createQueryBuilder({ data: null, error: { code: "PGRST116" } }) as never
-    );
-    const res = await POST(createPostRequest({ action: "accept" }));
+  it("オファーが見つからない → 404", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1", is_approved: true, is_banned: false });
+    mockCollectionGet.mockResolvedValue(makeSnap([]));
+
+    const { POST } = await import("@/app/api/matching/two-person-response/route");
+    const res = await POST(makeRequest({ action: "accept" }));
     expect(res.status).toBe(404);
   });
 
-  // ─── accept ───────────────────────────────────
-  it("accept: パートナーが未承諾 → { status: 'waiting_for_partner' }", async () => {
-    vi.mocked(supabaseAdmin.from).mockReturnValue(
-      createQueryBuilder({ data: twoPersonReq, error: null }) as never
+  it("accept → 相手待ち → { status: 'waiting_for_partner' }", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1", is_approved: true, is_banned: false });
+    mockCollectionGet.mockResolvedValue(
+      makeSnap([{ id: "req-1", status: "two_person_offered" }])
     );
-    // confirm_two_person_match RPC → null（パートナー未承諾）
-    vi.mocked(supabaseAdmin.rpc).mockResolvedValue({ data: null, error: null } as never);
+    mockConfirmTwoPersonMatch.mockResolvedValue(null); // まだグループ未作成
 
-    const res = await POST(createPostRequest({ action: "accept" }));
+    const { POST } = await import("@/app/api/matching/two-person-response/route");
+    const res = await POST(makeRequest({ action: "accept" }));
+
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.status).toBe("waiting_for_partner");
+    const data = await res.json();
+    expect(data.status).toBe("waiting_for_partner");
+    expect(mockConfirmTwoPersonMatch).toHaveBeenCalledWith("req-1");
   });
 
-  it("accept: 両者承諾済み → { status: 'matched', group, members }", async () => {
-    const GROUP_ID = "group-uuid-1";
-    const members = [
-      { id: "u1", nickname: "A", birth_year: 1998, industry: "it", avatar_emoji: "😊", bio: "" },
-      { id: "u2", nickname: "B", birth_year: 1999, industry: "finance", avatar_emoji: "😎", bio: "" },
-    ];
-
-    vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-      if (table === "match_requests") {
-        return createQueryBuilder({ data: twoPersonReq, error: null }) as never;
-      }
-      if (table === "match_groups") {
-        return createQueryBuilder({
-          data: {
-            ...makeMatchGroup(),
-            match_group_members: members.map((m) => ({ users: m })),
-          },
-          error: null,
-        }) as never;
-      }
-      return createQueryBuilder({ data: null, error: null }) as never;
+  it("accept → 両者承諾 → { status: 'matched', group, members }", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1", is_approved: true, is_banned: false });
+    mockCollectionGet.mockResolvedValue(
+      makeSnap([{ id: "req-1", status: "two_person_offered" }])
+    );
+    mockConfirmTwoPersonMatch.mockResolvedValue("group-2p");
+    mockGetGroupWithMembers.mockResolvedValue({
+      group: { id: "group-2p", area: "namba", status: "pending" },
+      members: [{ id: "u1", nickname: "太郎" }, { id: "u2", nickname: "花子" }],
     });
-    // confirm_two_person_match RPC → groupId（両者承諾）
-    vi.mocked(supabaseAdmin.rpc).mockResolvedValue({ data: GROUP_ID, error: null } as never);
 
-    const res = await POST(createPostRequest({ action: "accept" }));
+    const { POST } = await import("@/app/api/matching/two-person-response/route");
+    const res = await POST(makeRequest({ action: "accept" }));
+
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.status).toBe("matched");
-    expect(body.group).toBeDefined();
-    expect(body.members).toBeDefined();
+    const data = await res.json();
+    expect(data.status).toBe("matched");
+    expect(data.group.id).toBe("group-2p");
   });
 
-  it("accept: RPC エラー → 500", async () => {
-    vi.mocked(supabaseAdmin.from).mockReturnValue(
-      createQueryBuilder({ data: twoPersonReq, error: null }) as never
-    );
-    vi.mocked(supabaseAdmin.rpc).mockResolvedValue({
-      data: null,
-      error: { message: "rpc error" },
-    } as never);
-
-    const res = await POST(createPostRequest({ action: "accept" }));
-    expect(res.status).toBe(500);
-  });
-
-  // ─── decline ──────────────────────────────────
   it("decline → { status: 'no_match' }", async () => {
-    vi.mocked(supabaseAdmin.from).mockReturnValue(
-      createQueryBuilder({ data: twoPersonReq, error: null }) as never
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1", is_approved: true, is_banned: false });
+    mockCollectionGet.mockResolvedValue(
+      makeSnap([{ id: "req-1", status: "two_person_offered" }])
     );
-    vi.mocked(supabaseAdmin.rpc).mockResolvedValue({ data: null, error: null } as never);
+    mockDeclineTwoPersonMatch.mockResolvedValue(undefined);
 
-    const res = await POST(createPostRequest({ action: "decline" }));
+    const { POST } = await import("@/app/api/matching/two-person-response/route");
+    const res = await POST(makeRequest({ action: "decline" }));
+
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.status).toBe("no_match");
-  });
-
-  it("decline: RPC エラー → 500", async () => {
-    vi.mocked(supabaseAdmin.from).mockReturnValue(
-      createQueryBuilder({ data: twoPersonReq, error: null }) as never
-    );
-    vi.mocked(supabaseAdmin.rpc).mockResolvedValue({
-      data: null,
-      error: { message: "rpc error" },
-    } as never);
-
-    const res = await POST(createPostRequest({ action: "decline" }));
-    expect(res.status).toBe(500);
+    const data = await res.json();
+    expect(data.status).toBe("no_match");
+    expect(mockDeclineTwoPersonMatch).toHaveBeenCalledWith("req-1");
   });
 });

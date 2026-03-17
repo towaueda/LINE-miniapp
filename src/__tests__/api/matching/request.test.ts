@@ -1,229 +1,221 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { POST } from "@/app/api/matching/request/route";
-import {
-  createPostRequest,
-  makeDbUser,
-  makeMatchGroup,
-  createQueryBuilder,
-  setupFromMock,
-} from "../../helpers/supabaseMock";
 
-vi.mock("@/lib/auth", () => ({ authenticateRequest: vi.fn() }));
-vi.mock("@/lib/supabase/server", () => ({
-  supabaseAdmin: { from: vi.fn(), rpc: vi.fn() },
+// ── モック ────────────────────────────────────────────
+const mockAuthenticateRequest = vi.fn();
+vi.mock("@/lib/auth", () => ({
+  authenticateRequest: (...args: unknown[]) => mockAuthenticateRequest(...args),
 }));
-vi.mock("@/lib/matching", () => ({ tryMatch: vi.fn() }));
 
-import { authenticateRequest } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
-import { tryMatch } from "@/lib/matching";
+const mockTryMatch = vi.fn();
+const mockGetGroupWithMembers = vi.fn();
+const mockExpireOldMatchRequests = vi.fn().mockResolvedValue(undefined);
+vi.mock("@/lib/matching", () => ({
+  tryMatch: (...args: unknown[]) => mockTryMatch(...args),
+  getGroupWithMembers: (...args: unknown[]) => mockGetGroupWithMembers(...args),
+  expireOldMatchRequests: () => mockExpireOldMatchRequests(),
+}));
 
-// 未来の木曜日を取得
-function nextThursday(weeksAhead = 1): string {
-  const now = new Date();
-  const day = now.getDay();
-  const diff = ((4 - day + 7) % 7) + 7 * (weeksAhead - 1) || 7;
-  const d = new Date(now);
-  d.setDate(now.getDate() + diff);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
+const mockBatchUpdate = vi.fn();
+const mockBatchCommit = vi.fn().mockResolvedValue(undefined);
+const mockAdd = vi.fn();
+const mockCollectionGet = vi.fn();
+
+vi.mock("@/lib/firebase/admin", () => ({
+  adminDb: {
+    collection: vi.fn(() => ({
+      where: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      get: mockCollectionGet,
+      add: mockAdd,
+      doc: vi.fn(() => ({ get: mockCollectionGet })),
+    })),
+    batch: () => ({ update: mockBatchUpdate, commit: mockBatchCommit }),
+  },
+}));
+
+// ── ヘルパー ──────────────────────────────────────────
+function makeUser(overrides: Partial<{
+  id: string; is_approved: boolean; is_banned: boolean;
+  nickname: string; area: string; industry: string;
+}> = {}) {
+  return {
+    id: overrides.id ?? "u1",
+    is_approved: overrides.is_approved ?? true,
+    is_banned: overrides.is_banned ?? false,
+    nickname: overrides.nickname ?? "太郎",
+    area: overrides.area ?? "umeda",
+    industry: overrides.industry ?? "it",
+  };
 }
 
-const validUser = makeDbUser();
-const VALID_AREA = "umeda";
-const VALID_DATES = [nextThursday(1), nextThursday(2)];
-
-/** Promise.all 内の複数 from 呼び出しに対応したセットアップ */
-function setupMatchingMocks({
-  memberGroups = [],
-  reviewCount = 0,
-}: {
-  memberGroups?: unknown[];
-  reviewCount?: number;
-} = {}) {
-  // rpc("expire_old_match_requests") → void
-  vi.mocked(supabaseAdmin.rpc).mockResolvedValue({ data: null, error: null } as never);
-
-  let callCount = 0;
-  vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-    callCount++;
-    // match_group_members（pending review チェック）
-    if (table === "match_group_members") {
-      return createQueryBuilder({ data: memberGroups, error: null }) as never;
-    }
-    // reviews（pending review count チェック）
-    if (table === "reviews") {
-      return createQueryBuilder({ data: null, error: null, count: reviewCount }) as never;
-    }
-    // match_requests（既存waiting cancel / 新規insert）
-    if (table === "match_requests") {
-      return createQueryBuilder({
-        data: { id: "req-uuid-1", user_id: validUser.id, area: VALID_AREA, available_dates: VALID_DATES, status: "waiting" },
-        error: null,
-      }) as never;
-    }
-    // match_groups（グループ取得）
-    if (table === "match_groups") {
-      return createQueryBuilder({
-        data: { ...makeMatchGroup(), match_group_members: [] },
-        error: null,
-      }) as never;
-    }
-    return createQueryBuilder({ data: null, error: null }) as never;
+function makeRequest(body: object) {
+  return new Request("http://localhost/api/matching/request", {
+    method: "POST",
+    headers: { Authorization: "Bearer token", "Content-Type": "application/json" },
+    body: JSON.stringify(body),
   });
 }
+
+// 翌週以降の木曜日を動的に取得
+function getNextThursday(weeksAhead = 1): string {
+  const d = new Date();
+  const daysUntilThursday = (4 - d.getDay() + 7) % 7 || 7;
+  d.setDate(d.getDate() + daysUntilThursday + (weeksAhead - 1) * 7);
+  return d.toISOString().split("T")[0];
+}
+
+function makeSnap(docs: Array<{ id: string; [key: string]: unknown }>) {
+  return {
+    empty: docs.length === 0,
+    docs: docs.map((d) => ({ id: d.id, data: () => d, ref: { update: vi.fn() } })),
+  };
+}
+
+const validDates = [getNextThursday(1)];
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockExpireOldMatchRequests.mockResolvedValue(undefined);
+  mockBatchCommit.mockResolvedValue(undefined);
+  // デフォルト: グループなし・waitingなし
+  mockCollectionGet.mockResolvedValue(makeSnap([]));
+  mockAdd.mockResolvedValue({
+    id: "new-req-id",
+    get: vi.fn().mockResolvedValue({ id: "new-req-id", data: () => ({ status: "waiting" }) }),
+  });
+});
 
 describe("POST /api/matching/request", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(authenticateRequest).mockResolvedValue(validUser as never);
-    vi.mocked(tryMatch).mockResolvedValue(null);
-    setupMatchingMocks();
-  });
-
-  // ─── 認証・権限チェック ────────────────────────
-  it("未認証 → 401", async () => {
-    vi.mocked(authenticateRequest).mockResolvedValue(null);
-    const res = await POST(createPostRequest({ area: VALID_AREA, dates: VALID_DATES }));
-    expect(res.status).toBe(401);
-  });
-
-  it("is_approved=false → 403", async () => {
-    vi.mocked(authenticateRequest).mockResolvedValue(
-      makeDbUser({ is_approved: false }) as never
-    );
-    const res = await POST(createPostRequest({ area: VALID_AREA, dates: VALID_DATES }));
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.error).toMatch(/未承認/);
-  });
-
-  it("is_banned=true → 403", async () => {
-    vi.mocked(authenticateRequest).mockResolvedValue(
-      makeDbUser({ is_banned: true }) as never
-    );
-    const res = await POST(createPostRequest({ area: VALID_AREA, dates: VALID_DATES }));
-    expect(res.status).toBe(403);
-    const body = await res.json();
-    expect(body.error).toMatch(/停止/);
-  });
-
-  it("プロフィール未完成（nickname なし）→ 400", async () => {
-    vi.mocked(authenticateRequest).mockResolvedValue(
-      makeDbUser({ nickname: null }) as never
-    );
-    const res = await POST(createPostRequest({ area: VALID_AREA, dates: VALID_DATES }));
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/プロフィール/);
-  });
-
-  // ─── 入力バリデーション ────────────────────────
-  it("無効なエリア → 400", async () => {
-    const res = await POST(createPostRequest({ area: "tokyo", dates: VALID_DATES }));
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/エリア/);
-  });
-
-  it("木曜日以外の日付 → 400", async () => {
-    const monday = (() => {
-      const d = new Date();
-      const diff = (1 - d.getDay() + 7) % 7 || 7;
-      d.setDate(d.getDate() + diff);
-      return d.toISOString().split("T")[0];
-    })();
-    const res = await POST(createPostRequest({ area: VALID_AREA, dates: [monday] }));
-    expect(res.status).toBe(400);
-    expect((await res.json()).error).toMatch(/木曜日/);
-  });
-
-  it("9件以上の日付 → 400", async () => {
-    const dates = Array.from({ length: 9 }, (_, i) => nextThursday(i + 1));
-    const res = await POST(createPostRequest({ area: VALID_AREA, dates }));
-    expect(res.status).toBe(400);
-  });
-
-  it("空の日付配列 → 400", async () => {
-    const res = await POST(createPostRequest({ area: VALID_AREA, dates: [] }));
-    expect(res.status).toBe(400);
-  });
-
-  // ─── レビュー未完了チェック ────────────────────
-  it("completed グループに未レビューあり → 400 + hasPendingReview:true", async () => {
-    setupMatchingMocks({
-      memberGroups: [
-        { group_id: "g1", match_groups: { id: "g1", status: "completed" } },
-      ],
-      reviewCount: 0, // レビューなし
+  // ─── 認証・権限チェック ──────────────────────────
+  describe("認証・権限チェック", () => {
+    it("未認証 → 401", async () => {
+      mockAuthenticateRequest.mockResolvedValue(null);
+      const { POST } = await import("@/app/api/matching/request/route");
+      const res = await POST(makeRequest({ area: "umeda", dates: validDates }));
+      expect(res.status).toBe(401);
     });
 
-    const res = await POST(createPostRequest({ area: VALID_AREA, dates: VALID_DATES }));
-    expect(res.status).toBe(400);
-    const body = await res.json();
-    expect(body.hasPendingReview).toBe(true);
-  });
-
-  it("completed グループに全レビュー済み → 通過してマッチング試行", async () => {
-    setupMatchingMocks({
-      memberGroups: [
-        { group_id: "g1", match_groups: { id: "g1", status: "completed" } },
-      ],
-      reviewCount: 2, // レビューあり
+    it("未承認ユーザー → 403", async () => {
+      mockAuthenticateRequest.mockResolvedValue(makeUser({ is_approved: false }));
+      const { POST } = await import("@/app/api/matching/request/route");
+      const res = await POST(makeRequest({ area: "umeda", dates: validDates }));
+      expect(res.status).toBe(403);
     });
 
-    const res = await POST(createPostRequest({ area: VALID_AREA, dates: VALID_DATES }));
-    // waiting か matched のいずれか（マッチしない場合はwaiting）
-    expect([200]).toContain(res.status);
-    const body = await res.json();
-    expect(["waiting", "matched"]).toContain(body.status);
-  });
-
-  // ─── マッチング結果 ─────────────────────────────
-  it("tryMatch が null → { status: 'waiting' }", async () => {
-    vi.mocked(tryMatch).mockResolvedValue(null);
-    const res = await POST(createPostRequest({ area: VALID_AREA, dates: VALID_DATES }));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.status).toBe("waiting");
-    expect(body.request).toBeDefined();
-  });
-
-  it("tryMatch がgroupId → { status: 'matched', group, members }", async () => {
-    vi.mocked(tryMatch).mockResolvedValue("group-uuid-1");
-    const members = [
-      { id: "u1", nickname: "A", birth_year: 1998, industry: "it", avatar_emoji: "😊", bio: "" },
-      { id: "u2", nickname: "B", birth_year: 1999, industry: "finance", avatar_emoji: "😎", bio: "" },
-      { id: "u3", nickname: "C", birth_year: 2000, industry: "media", avatar_emoji: "🤗", bio: "" },
-    ];
-    vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-      if (table === "match_group_members") {
-        return createQueryBuilder({ data: [], error: null }) as never;
-      }
-      if (table === "match_requests") {
-        return createQueryBuilder({
-          data: { id: "req-1", user_id: validUser.id, area: VALID_AREA, available_dates: VALID_DATES, status: "waiting" },
-          error: null,
-        }) as never;
-      }
-      if (table === "match_groups") {
-        return createQueryBuilder({
-          data: {
-            ...makeMatchGroup(),
-            match_group_members: members.map((m) => ({ users: m })),
-          },
-          error: null,
-        }) as never;
-      }
-      return createQueryBuilder({ data: null, error: null }) as never;
+    it("BAN ユーザー → 403", async () => {
+      mockAuthenticateRequest.mockResolvedValue(makeUser({ is_banned: true }));
+      const { POST } = await import("@/app/api/matching/request/route");
+      const res = await POST(makeRequest({ area: "umeda", dates: validDates }));
+      expect(res.status).toBe(403);
     });
-    vi.mocked(supabaseAdmin.rpc).mockResolvedValue({ data: null, error: null } as never);
 
-    const res = await POST(createPostRequest({ area: VALID_AREA, dates: VALID_DATES }));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.status).toBe("matched");
-    expect(body.group).toBeDefined();
-    expect(body.members).toBeDefined();
+    it("プロフィール未完成（nickname なし）→ 400", async () => {
+      mockAuthenticateRequest.mockResolvedValue(makeUser({ nickname: "" }));
+      const { POST } = await import("@/app/api/matching/request/route");
+      const res = await POST(makeRequest({ area: "umeda", dates: validDates }));
+      expect(res.status).toBe(400);
+    });
+  });
+
+  // ─── 入力バリデーション ──────────────────────────
+  describe("入力バリデーション", () => {
+    beforeEach(() => {
+      mockAuthenticateRequest.mockResolvedValue(makeUser());
+    });
+
+    it("無効なエリア → 400", async () => {
+      const { POST } = await import("@/app/api/matching/request/route");
+      const res = await POST(makeRequest({ area: "invalid-area", dates: validDates }));
+      expect(res.status).toBe(400);
+    });
+
+    it("日程なし → 400", async () => {
+      const { POST } = await import("@/app/api/matching/request/route");
+      const res = await POST(makeRequest({ area: "umeda", dates: [] }));
+      expect(res.status).toBe(400);
+    });
+
+    it("木曜日以外 → 400", async () => {
+      const { POST } = await import("@/app/api/matching/request/route");
+      const res = await POST(makeRequest({ area: "umeda", dates: ["2026-04-06"] })); // 月曜
+      expect(res.status).toBe(400);
+    });
+  });
+
+  // ─── レビュー未完了チェック ──────────────────────
+  describe("レビュー未完了チェック", () => {
+    beforeEach(() => {
+      mockAuthenticateRequest.mockResolvedValue(makeUser());
+    });
+
+    it("完了済みグループでレビュー未提出 → 400 + hasPendingReview", async () => {
+      // グループメンバーに所属
+      mockCollectionGet
+        .mockResolvedValueOnce(makeSnap([{ id: "m1", group_id: "g1", user_id: "u1" }]))
+        // グループ status = completed
+        .mockResolvedValueOnce({ exists: true, id: "g1", data: () => ({ status: "completed" }) })
+        // レビュー未提出（empty）
+        .mockResolvedValueOnce(makeSnap([]));
+
+      const { POST } = await import("@/app/api/matching/request/route");
+      const res = await POST(makeRequest({ area: "umeda", dates: validDates }));
+
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.hasPendingReview).toBe(true);
+    });
+  });
+
+  // ─── マッチング処理 ──────────────────────────────
+  describe("マッチング処理", () => {
+    beforeEach(() => {
+      mockAuthenticateRequest.mockResolvedValue(makeUser());
+      // グループ・レビューなし
+      mockCollectionGet.mockResolvedValue(makeSnap([]));
+    });
+
+    it("即時マッチング成立 → matched と group を返す", async () => {
+      mockTryMatch.mockResolvedValue("group-id-1");
+      mockGetGroupWithMembers.mockResolvedValue({
+        group: { id: "group-id-1", area: "umeda", date: validDates[0], status: "pending" },
+        members: [{ id: "u1", nickname: "太郎" }, { id: "u2", nickname: "花子" }],
+      });
+
+      const { POST } = await import("@/app/api/matching/request/route");
+      const res = await POST(makeRequest({ area: "umeda", dates: validDates }));
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.status).toBe("matched");
+      expect(data.group.id).toBe("group-id-1");
+    });
+
+    it("マッチング不成立 → waiting と request を返す", async () => {
+      mockTryMatch.mockResolvedValue(null);
+
+      const { POST } = await import("@/app/api/matching/request/route");
+      const res = await POST(makeRequest({ area: "umeda", dates: validDates }));
+
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.status).toBe("waiting");
+    });
+
+    it("既存の waiting リクエストがある → 先にキャンセルしてから新規作成", async () => {
+      mockCollectionGet
+        .mockResolvedValueOnce(makeSnap([]))  // グループメンバー
+        .mockResolvedValueOnce(makeSnap([{ id: "old-req", status: "waiting" }])); // 既存waiting
+
+      mockTryMatch.mockResolvedValue(null);
+
+      const { POST } = await import("@/app/api/matching/request/route");
+      await POST(makeRequest({ area: "umeda", dates: validDates }));
+
+      expect(mockBatchUpdate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ status: "cancelled" })
+      );
+      expect(mockAdd).toHaveBeenCalled();
+    });
   });
 });

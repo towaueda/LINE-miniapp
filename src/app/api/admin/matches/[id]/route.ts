@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyAdmin } from "../../auth/route";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { adminDb } from "@/lib/firebase/admin";
 
 export async function PUT(
   request: Request,
@@ -19,14 +19,10 @@ export async function PUT(
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
 
-    const { error } = await supabaseAdmin
-      .from("match_groups")
-      .update({ status })
-      .eq("id", params.id);
-
-    if (error) {
-      return NextResponse.json({ error: "Failed to update" }, { status: 500 });
-    }
+    await adminDb.collection("match_groups").doc(params.id).update({
+      status,
+      updated_at: new Date().toISOString(),
+    });
 
     return NextResponse.json({ success: true });
   } catch {

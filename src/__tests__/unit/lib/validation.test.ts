@@ -208,10 +208,10 @@ describe("validateReviewComment", () => {
 // isValidUUID
 // ─────────────────────────────────────────────
 describe("isValidUUID", () => {
-  it("有効なUUID v4 → true", () =>
-    expect(isValidUUID("550e8400-e29b-41d4-a716-446655440000")).toBe(true));
-  it("大文字UUID → true（case-insensitive）", () =>
-    expect(isValidUUID("550E8400-E29B-41D4-A716-446655440000")).toBe(true));
+  it("有効な Firestore ID（20文字英数字）→ true", () =>
+    expect(isValidUUID("abc123XYZ789abcdefgh")).toBe(true));
+  it("20文字英数字（大文字含む）→ true", () =>
+    expect(isValidUUID("ABCDEFGHIJ1234567890")).toBe(true));
   it("不正な形式 → false", () => expect(isValidUUID("not-a-uuid")).toBe(false));
   it("空文字 → false", () => expect(isValidUUID("")).toBe(false));
   it("数値型 → false", () => expect(isValidUUID(123)).toBe(false));

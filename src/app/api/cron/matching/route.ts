@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { offerTwoPersonMatches, expireNoMatchRequests } from "@/lib/matching";
 
 export async function GET(request: Request) {
   const authHeader = request.headers.get("Authorization");
@@ -10,13 +10,10 @@ export async function GET(request: Request) {
   }
 
   try {
-    const [offerResult, expireResult] = await Promise.all([
-      supabaseAdmin.rpc("offer_two_person_matches"),
-      supabaseAdmin.rpc("expire_no_match_requests"),
+    const [offered, expired] = await Promise.all([
+      offerTwoPersonMatches(),
+      expireNoMatchRequests(),
     ]);
-
-    const offered = offerResult.data ?? 0;
-    const expired = expireResult.data ?? 0;
 
     return NextResponse.json({ ok: true, offered, expired });
   } catch {

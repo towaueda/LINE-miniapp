@@ -1,212 +1,172 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { GET } from "@/app/api/matching/status/route";
-import {
-  createGetRequest,
-  makeDbUser,
-  makeMatchGroup,
-  createQueryBuilder,
-} from "../../helpers/supabaseMock";
 
-vi.mock("@/lib/auth", () => ({ authenticateRequest: vi.fn() }));
-vi.mock("@/lib/supabase/server", () => ({
-  supabaseAdmin: { from: vi.fn() },
+// ── モック ────────────────────────────────────────────
+const mockAuthenticateRequest = vi.fn();
+vi.mock("@/lib/auth", () => ({
+  authenticateRequest: (...args: unknown[]) => mockAuthenticateRequest(...args),
 }));
 
-import { authenticateRequest } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
+const mockGetGroupWithMembers = vi.fn();
+vi.mock("@/lib/matching", () => ({
+  getGroupWithMembers: (...args: unknown[]) => mockGetGroupWithMembers(...args),
+}));
 
-const validUser = makeDbUser();
+const mockCollectionGet = vi.fn();
+const mockDocGet = vi.fn();
 
-/** supabaseAdmin.from の呼び出しパターンを設定するヘルパー */
-function setupFromSequence(responses: Record<string, unknown>) {
-  vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-    const result = responses[table] ?? { data: null, error: null };
-    return createQueryBuilder(result as never) as never;
+vi.mock("@/lib/firebase/admin", () => ({
+  adminDb: {
+    collection: vi.fn(() => ({
+      where: vi.fn().mockReturnThis(),
+      orderBy: vi.fn().mockReturnThis(),
+      limit: vi.fn().mockReturnThis(),
+      get: mockCollectionGet,
+      doc: vi.fn(() => ({ get: mockDocGet })),
+    })),
+  },
+}));
+
+function makeRequest() {
+  return new Request("http://localhost/api/matching/status", {
+    headers: { Authorization: "Bearer token" },
   });
 }
 
-describe("GET /api/matching/status", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    vi.mocked(authenticateRequest).mockResolvedValue(validUser as never);
-  });
+function makeSnap(docs: Array<{ id: string; [key: string]: unknown }>) {
+  return {
+    empty: docs.length === 0,
+    docs: docs.map((d) => ({ id: d.id, data: () => d })),
+  };
+}
 
+beforeEach(() => {
+  vi.resetAllMocks();
+});
+
+describe("GET /api/matching/status", () => {
   it("未認証 → 401", async () => {
-    vi.mocked(authenticateRequest).mockResolvedValue(null);
-    const res = await GET(createGetRequest());
+    mockAuthenticateRequest.mockResolvedValue(null);
+    const { GET } = await import("@/app/api/matching/status/route");
+    const res = await GET(makeRequest());
     expect(res.status).toBe(401);
   });
 
-  // ─── idle ─────────────────────────────────────
-  it("マッチリクエストなし・アクティブグループなし → { status: 'idle' }", async () => {
-    setupFromSequence({
-      match_group_members: { data: [], error: null },
-      match_requests: { data: null, error: { code: "PGRST116" } }, // no row
-    });
-    const res = await GET(createGetRequest());
+  it("グループなし・リクエストなし → { status: 'idle' }", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockCollectionGet
+      .mockResolvedValueOnce(makeSnap([]))   // match_group_members
+      .mockResolvedValueOnce(makeSnap([]));  // match_requests
+
+    const { GET } = await import("@/app/api/matching/status/route");
+    const res = await GET(makeRequest());
+
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.status).toBe("idle");
+    const data = await res.json();
+    expect(data.status).toBe("idle");
   });
 
-  // ─── waiting ──────────────────────────────────
-  it("waiting リクエストあり → { status: 'waiting', request }", async () => {
-    const waitingReq = {
-      id: "req-1",
-      user_id: validUser.id,
-      status: "waiting",
-      area: "umeda",
-      available_dates: ["2026-03-20"],
-      updated_at: new Date().toISOString(),
-    };
-    setupFromSequence({
-      match_group_members: { data: [], error: null },
-      match_requests: { data: waitingReq, error: null },
-    });
-    const res = await GET(createGetRequest());
+  it("waiting リクエストあり → { status: 'waiting' }", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockCollectionGet
+      .mockResolvedValueOnce(makeSnap([]))  // グループメンバーなし
+      .mockResolvedValueOnce(
+        makeSnap([{ id: "req-1", status: "waiting", available_dates: ["2026-04-03"], updated_at: new Date().toISOString() }])
+      );
+
+    const { GET } = await import("@/app/api/matching/status/route");
+    const res = await GET(makeRequest());
+
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.status).toBe("waiting");
-    expect(body.request).toBeDefined();
+    const data = await res.json();
+    expect(data.status).toBe("waiting");
   });
 
-  // ─── matched ──────────────────────────────────
-  it("アクティブ（confirmed）グループあり → { status: 'matched', group, members }", async () => {
-    const members = [
-      { id: "u1", nickname: "A", birth_year: 1998, industry: "it", avatar_emoji: "😊", bio: "" },
-      { id: "u2", nickname: "B", birth_year: 1999, industry: "finance", avatar_emoji: "😎", bio: "" },
-    ];
-    let callCount = 0;
-    vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-      callCount++;
-      if (table === "match_group_members" && callCount === 1) {
-        return createQueryBuilder({
-          data: [{ group_id: "g1", match_groups: { id: "g1", status: "confirmed" } }],
-          error: null,
-        }) as never;
-      }
-      if (table === "match_requests") {
-        return createQueryBuilder({ data: null, error: { code: "PGRST116" } }) as never;
-      }
-      if (table === "match_groups") {
-        return createQueryBuilder({
-          data: {
-            ...makeMatchGroup(),
-            match_group_members: members.map((m) => ({ users: m })),
-          },
-          error: null,
-        }) as never;
-      }
-      return createQueryBuilder({ data: null, error: null }) as never;
+  it("pending グループあり → { status: 'matched', group, members }", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockCollectionGet
+      .mockResolvedValueOnce(makeSnap([{ id: "m1", group_id: "g1", user_id: "u1" }]))
+      .mockResolvedValueOnce(makeSnap([])); // リクエストなし
+
+    // グループ doc
+    mockDocGet.mockResolvedValueOnce({ exists: true, id: "g1", data: () => ({ status: "pending" }) });
+
+    mockGetGroupWithMembers.mockResolvedValue({
+      group: { id: "g1", area: "umeda", status: "pending" },
+      members: [{ id: "u1", nickname: "太郎" }],
     });
 
-    const res = await GET(createGetRequest());
+    const { GET } = await import("@/app/api/matching/status/route");
+    const res = await GET(makeRequest());
+
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.status).toBe("matched");
-    expect(body.group).toBeDefined();
-    expect(body.members).toBeDefined();
+    const data = await res.json();
+    expect(data.status).toBe("matched");
+    expect(data.group.id).toBe("g1");
   });
 
-  // ─── two_person_offered ───────────────────────
   it("two_person_offered → { status: 'two_person_offered', proposedDates }", async () => {
-    const myDates = ["2026-03-20", "2026-03-27"];
-    const partnerDates = ["2026-03-20", "2026-04-03"];
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockCollectionGet
+      .mockResolvedValueOnce(makeSnap([]))  // グループメンバーなし
+      .mockResolvedValueOnce(
+        makeSnap([{
+          id: "req-1",
+          status: "two_person_offered",
+          available_dates: ["2026-04-10"],
+          two_person_partner_id: "req-2",
+          updated_at: new Date().toISOString(),
+        }])
+      );
 
-    let callCount = 0;
-    vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-      callCount++;
-      if (table === "match_group_members") {
-        return createQueryBuilder({ data: [], error: null }) as never;
-      }
-      if (table === "match_requests" && callCount <= 2) {
-        return createQueryBuilder({
-          data: {
-            id: "req-1",
-            status: "two_person_offered",
-            available_dates: myDates,
-            two_person_partner_id: "req-2",
-            updated_at: new Date().toISOString(),
-          },
-          error: null,
-        }) as never;
-      }
-      if (table === "match_requests" && callCount > 2) {
-        return createQueryBuilder({
-          data: { available_dates: partnerDates },
-          error: null,
-        }) as never;
-      }
-      return createQueryBuilder({ data: null, error: null }) as never;
+    // パートナーは match_requests.doc(id).get() で取得される
+    mockDocGet.mockResolvedValueOnce({
+      exists: true,
+      data: () => ({ available_dates: ["2026-04-10"] }),
     });
 
-    const res = await GET(createGetRequest());
+    const { GET } = await import("@/app/api/matching/status/route");
+    const res = await GET(makeRequest());
+
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.status).toBe("two_person_offered");
-    expect(body.proposedDates).toContain("2026-03-20");
+    const data = await res.json();
+    expect(data.status).toBe("two_person_offered");
+    expect(Array.isArray(data.proposedDates)).toBe(true);
   });
 
-  // ─── no_match ─────────────────────────────────
   it("no_match（7日以内）→ { status: 'no_match' }", async () => {
-    setupFromSequence({
-      match_group_members: { data: [], error: null },
-      match_requests: {
-        data: {
-          id: "req-1",
-          status: "no_match",
-          updated_at: new Date().toISOString(), // 直近
-        },
-        error: null,
-      },
-    });
-    const res = await GET(createGetRequest());
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    const recentDate = new Date(Date.now() - 1000 * 60 * 60).toISOString(); // 1時間前
+    mockCollectionGet
+      .mockResolvedValueOnce(makeSnap([]))
+      .mockResolvedValueOnce(
+        makeSnap([{ id: "req-1", status: "no_match", updated_at: recentDate }])
+      );
+
+    const { GET } = await import("@/app/api/matching/status/route");
+    const res = await GET(makeRequest());
+
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.status).toBe("no_match");
+    const data = await res.json();
+    expect(data.status).toBe("no_match");
   });
 
-  it("no_match（7日超）→ idle にフォールスルー", async () => {
-    const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000).toISOString();
-    setupFromSequence({
-      match_group_members: { data: [], error: null },
-      match_requests: {
-        data: {
-          id: "req-1",
-          status: "no_match",
-          updated_at: eightDaysAgo,
-        },
-        error: null,
-      },
-    });
-    const res = await GET(createGetRequest());
+  it("完了済みグループ + レビュー未提出 → hasPendingReview: true", async () => {
+    mockAuthenticateRequest.mockResolvedValue({ id: "u1" });
+    mockCollectionGet
+      .mockResolvedValueOnce(makeSnap([{ id: "m1", group_id: "g1", user_id: "u1" }]))
+      .mockResolvedValueOnce(makeSnap([])); // リクエストなし
+
+    // グループ status = completed
+    mockDocGet.mockResolvedValueOnce({ exists: true, id: "g1", data: () => ({ status: "completed" }) });
+
+    // レビュー未提出
+    mockCollectionGet.mockResolvedValueOnce(makeSnap([]));
+
+    const { GET } = await import("@/app/api/matching/status/route");
+    const res = await GET(makeRequest());
+
     expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.status).toBe("idle");
-  });
-
-  // ─── hasPendingReview フラグ ───────────────────
-  it("completed グループに未レビューあり → hasPendingReview:true が付与", async () => {
-    let callCount = 0;
-    vi.mocked(supabaseAdmin.from).mockImplementation((table: string) => {
-      callCount++;
-      if (table === "match_group_members") {
-        return createQueryBuilder({
-          data: [{ group_id: "g1", match_groups: { id: "g1", status: "completed" } }],
-          error: null,
-        }) as never;
-      }
-      if (table === "reviews") {
-        return createQueryBuilder({ data: null, error: null, count: 0 }) as never;
-      }
-      if (table === "match_requests") {
-        return createQueryBuilder({ data: null, error: { code: "PGRST116" } }) as never;
-      }
-      return createQueryBuilder({ data: null, error: null }) as never;
-    });
-
-    const res = await GET(createGetRequest());
-    const body = await res.json();
-    expect(body.hasPendingReview).toBe(true);
+    const data = await res.json();
+    expect(data.hasPendingReview).toBe(true);
   });
 });

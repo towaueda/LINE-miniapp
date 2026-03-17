@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { confirmTwoPersonMatch, declineTwoPersonMatch, getGroupWithMembers } from "@/lib/matching";
 
 export async function POST(request: Request) {
   const user = await authenticateRequest(request);
@@ -22,42 +22,28 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "無効なアクションです" }, { status: 400 });
     }
 
-    // Find user's current two_person_offered request
-    const { data: matchReq } = await supabaseAdmin
-      .from("match_requests")
-      .select("*")
-      .eq("user_id", user.id)
-      .eq("status", "two_person_offered")
-      .order("created_at", { ascending: false })
+    const { adminDb } = await import("@/lib/firebase/admin");
+    const matchReqSnap = await adminDb
+      .collection("match_requests")
+      .where("user_id", "==", user.id)
+      .where("status", "==", "two_person_offered")
+      .orderBy("created_at", "desc")
       .limit(1)
-      .single();
+      .get();
 
-    if (!matchReq) {
+    if (matchReqSnap.empty) {
       return NextResponse.json({ error: "2人マッチングオファーが見つかりません" }, { status: 404 });
     }
 
-    if (action === "accept") {
-      const { data: groupId, error: rpcError } = await supabaseAdmin.rpc(
-        "confirm_two_person_match",
-        { p_request_id: matchReq.id }
-      );
+    const matchReqId = matchReqSnap.docs[0].id;
 
-      if (rpcError) {
-        return NextResponse.json({ error: "サーバーエラーが発生しました" }, { status: 500 });
-      }
+    if (action === "accept") {
+      const groupId = await confirmTwoPersonMatch(matchReqId);
 
       if (groupId) {
-        const { data: groupWithMembers } = await supabaseAdmin
-          .from("match_groups")
-          .select("*, match_group_members(user_id, users(id, nickname, birth_year, industry, avatar_emoji, bio))")
-          .eq("id", groupId)
-          .single();
-
-        if (groupWithMembers) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const { match_group_members, ...group } = groupWithMembers as any;
-          const members = match_group_members?.map((m: { users: unknown }) => m.users);
-          return NextResponse.json({ status: "matched", group, members });
+        const result = await getGroupWithMembers(groupId);
+        if (result) {
+          return NextResponse.json({ status: "matched", group: result.group, members: result.members });
         }
       }
 
@@ -65,14 +51,7 @@ export async function POST(request: Request) {
     }
 
     // action === 'decline'
-    const { error: rpcError } = await supabaseAdmin.rpc("decline_two_person_match", {
-      p_request_id: matchReq.id,
-    });
-
-    if (rpcError) {
-      return NextResponse.json({ error: "サーバーエラーが発生しました" }, { status: 500 });
-    }
-
+    await declineTwoPersonMatch(matchReqId);
     return NextResponse.json({ status: "no_match" });
   } catch {
     return NextResponse.json({ error: "サーバーエラーが発生しました" }, { status: 500 });

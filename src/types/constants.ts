@@ -23,11 +23,6 @@ export const INDUSTRY_OPTIONS = [
 
 export const INDUSTRY_LABEL_MAP = new Map(INDUSTRY_OPTIONS.map((o) => [o.value, o.label]));
 
-export const BIRTH_YEAR_OPTIONS: number[] = [];
-for (let y = 1990; y <= 2005; y++) {
-  BIRTH_YEAR_OPTIONS.push(y);
-}
-
 export const AGE_OPTIONS: number[] = [];
 for (let a = 24; a <= 30; a++) {
   AGE_OPTIONS.push(a);

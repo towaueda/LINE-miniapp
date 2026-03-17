@@ -1,11 +1,10 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
-import { tryMatch } from "@/lib/matching";
+import { adminDb } from "@/lib/firebase/admin";
+import { tryMatch, expireOldMatchRequests, getGroupWithMembers } from "@/lib/matching";
 import { isValidArea, validateDates } from "@/lib/validation";
 
 export async function POST(request: Request) {
-  // auth と body parsing を並列開始
   const authPromise = authenticateRequest(request);
   const bodyPromise = request.json();
 
@@ -14,7 +13,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "認証が必要です" }, { status: 401 });
   }
 
-  // 承認・BAN・プロフィール完成チェック
   if (!user.is_approved) {
     return NextResponse.json({ error: "アカウントが未承認です" }, { status: 403 });
   }
@@ -28,43 +26,43 @@ export async function POST(request: Request) {
   try {
     const { area, dates } = await bodyPromise;
 
-    // エリアのバリデーション
     if (!isValidArea(area)) {
       return NextResponse.json({ error: "無効なエリアです" }, { status: 400 });
     }
 
-    // 日付のバリデーション
     const dateResult = validateDates(dates);
     if (!dateResult.valid) {
       return NextResponse.json({ error: dateResult.reason }, { status: 400 });
     }
 
-    // 期限切れリクエストを自動失効 + 未完了レビューの確認（並列）
-    const [, { data: memberGroups }] = await Promise.all([
-      supabaseAdmin.rpc("expire_old_match_requests"),
-      supabaseAdmin
-        .from("match_group_members")
-        .select("group_id, match_groups(id, status)")
-        .eq("user_id", user.id),
+    // 期限切れリクエストを失効 + 完了済みグループのレビュー確認（並列）
+    const [, membersSnap] = await Promise.all([
+      expireOldMatchRequests(),
+      adminDb.collection("match_group_members").where("user_id", "==", user.id).get(),
     ]);
 
-    if (memberGroups) {
-      const completedGroups = memberGroups
-        .map((mg) => mg.match_groups as unknown as { id: string; status: string } | null)
-        .filter((g): g is { id: string; status: string } => g !== null && g.status === "completed");
+    // 完了済みグループのレビュー未提出チェック
+    const groupIds = membersSnap.docs.map((d) => d.data().group_id as string);
+    if (groupIds.length > 0) {
+      const groupDocs = await Promise.all(
+        groupIds.map((id) => adminDb.collection("match_groups").doc(id).get())
+      );
+      const completedGroupIds = groupDocs
+        .filter((d) => d.exists && d.data()!.status === "completed")
+        .map((d) => d.id);
 
-      if (completedGroups.length > 0) {
+      if (completedGroupIds.length > 0) {
         const reviewCounts = await Promise.all(
-          completedGroups.map((g) =>
-            supabaseAdmin
-              .from("reviews")
-              .select("*", { count: "exact", head: true })
-              .eq("group_id", g.id)
-              .eq("reviewer_id", user.id)
+          completedGroupIds.map((gId) =>
+            adminDb
+              .collection("reviews")
+              .where("group_id", "==", gId)
+              .where("reviewer_id", "==", user.id)
+              .limit(1)
+              .get()
           )
         );
-
-        if (reviewCounts.some((r) => r.count === 0)) {
+        if (reviewCounts.some((snap) => snap.empty)) {
           return NextResponse.json({
             error: "レビュー未完了のマッチングがあります",
             hasPendingReview: true,
@@ -73,52 +71,47 @@ export async function POST(request: Request) {
       }
     }
 
-    // 既存の待機中リクエストをキャンセル（レスポンスをブロックしない）
-    supabaseAdmin
-      .from("match_requests")
-      .update({ status: "cancelled" })
-      .eq("user_id", user.id)
-      .eq("status", "waiting")
-      .then(() => {}, console.error);
+    // 既存の waiting リクエストをキャンセル
+    const existingSnap = await adminDb
+      .collection("match_requests")
+      .where("user_id", "==", user.id)
+      .where("status", "==", "waiting")
+      .get();
 
-    // 新規リクエスト作成
-    const { data: matchReq, error } = await supabaseAdmin
-      .from("match_requests")
-      .insert({
-        user_id: user.id,
-        area,
-        available_dates: dateResult.dates,
-        status: "waiting",
-      })
-      .select()
-      .single();
-
-    if (error) {
-      return NextResponse.json({ error: "リクエストの作成に失敗しました" }, { status: 500 });
+    if (!existingSnap.empty) {
+      const batch = adminDb.batch();
+      existingSnap.docs.forEach((doc) => {
+        batch.update(doc.ref, { status: "cancelled", updated_at: new Date().toISOString() });
+      });
+      batch.commit().catch(console.error);
     }
 
-    // 即時マッチング試行（アトミックRPC）
-    const groupId = await tryMatch(matchReq.id);
+    // 新規リクエスト作成
+    const now = new Date().toISOString();
+    const matchReqRef = await adminDb.collection("match_requests").add({
+      user_id: user.id,
+      area,
+      available_dates: dateResult.dates,
+      status: "waiting",
+      matched_group_id: null,
+      created_at: now,
+      updated_at: now,
+    });
+
+    // 即時マッチング試行
+    const groupId = await tryMatch(matchReqRef.id);
 
     if (groupId) {
-      // グループ + メンバー情報を1クエリで取得（2 DB round trips → 1）
-      const { data: groupWithMembers } = await supabaseAdmin
-        .from("match_groups")
-        .select("*, match_group_members(user_id, users(id, nickname, birth_year, industry, avatar_emoji, bio))")
-        .eq("id", groupId)
-        .single();
-
-      if (groupWithMembers) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { match_group_members, ...group } = groupWithMembers as any;
-        const members = match_group_members?.map((m: { users: unknown }) => m.users);
-        return NextResponse.json({ status: "matched", group, members });
+      const result = await getGroupWithMembers(groupId);
+      if (result) {
+        return NextResponse.json({ status: "matched", group: result.group, members: result.members });
       }
     }
 
+    const matchReqDoc = await matchReqRef.get();
     return NextResponse.json({
       status: "waiting",
-      request: matchReq,
+      request: { id: matchReqDoc.id, ...matchReqDoc.data() },
     });
   } catch {
     return NextResponse.json({ error: "サーバーエラーが発生しました" }, { status: 500 });

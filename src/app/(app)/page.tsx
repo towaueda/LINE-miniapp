@@ -36,7 +36,6 @@ export default function Home() {
       const data = await res.json();
 
       if (data.error || !data.valid) {
-        // If API fails (e.g. Supabase not configured), skip validation
         if (!res.ok) {
           console.warn("Invite validation API unavailable, skipping");
         } else {

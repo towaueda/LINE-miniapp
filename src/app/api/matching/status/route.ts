@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { adminDb } from "@/lib/firebase/admin";
+import { getGroupWithMembers } from "@/lib/matching";
 
 export async function GET(request: Request) {
   const user = await authenticateRequest(request);
@@ -9,68 +10,75 @@ export async function GET(request: Request) {
   }
 
   try {
-    // 2つの独立クエリを並列実行（memberGroups で memberships も兼ねる）
-    const [{ data: memberGroups }, { data: activeReq }] = await Promise.all([
-      supabaseAdmin
-        .from("match_group_members")
-        .select("group_id, match_groups(id, status)")
-        .eq("user_id", user.id),
-      supabaseAdmin
-        .from("match_requests")
-        .select("*")
-        .eq("user_id", user.id)
-        .in("status", ["waiting", "two_person_offered", "no_match"])
-        .order("created_at", { ascending: false })
+    // ユーザーの参加グループ + アクティブリクエストを並列取得
+    const [membersSnap, activeReqSnap] = await Promise.all([
+      adminDb.collection("match_group_members").where("user_id", "==", user.id).get(),
+      adminDb
+        .collection("match_requests")
+        .where("user_id", "==", user.id)
+        .where("status", "in", ["waiting", "two_person_offered", "two_person_accepted", "no_match"])
+        .orderBy("created_at", "desc")
         .limit(1)
-        .single(),
+        .get(),
     ]);
 
-    // memberGroups から completed と active を同時に分類（1ループ）
+    // グループIDを取得してステータスを確認
     let hasPendingReview = false;
     const activeGroupIds: string[] = [];
 
-    if (memberGroups) {
+    if (!membersSnap.empty) {
+      const groupIds = membersSnap.docs.map((d) => d.data().group_id as string);
+      const groupDocs = await Promise.all(
+        groupIds.map((id) => adminDb.collection("match_groups").doc(id).get())
+      );
+
       const completedGroupIds: string[] = [];
-      for (const mg of memberGroups) {
-        const g = mg.match_groups as unknown as { id: string; status: string } | null;
-        if (!g) continue;
-        if (g.status === "completed") completedGroupIds.push(g.id);
-        if (g.status === "pending" || g.status === "confirmed") activeGroupIds.push(g.id);
+      for (const d of groupDocs) {
+        if (!d.exists) continue;
+        const status = d.data()!.status;
+        if (status === "completed") completedGroupIds.push(d.id);
+        if (status === "pending" || status === "confirmed") activeGroupIds.push(d.id);
       }
 
       if (completedGroupIds.length > 0) {
         const reviewCounts = await Promise.all(
           completedGroupIds.map((id) =>
-            supabaseAdmin
-              .from("reviews")
-              .select("*", { count: "exact", head: true })
-              .eq("group_id", id)
-              .eq("reviewer_id", user.id)
+            adminDb
+              .collection("reviews")
+              .where("group_id", "==", id)
+              .where("reviewer_id", "==", user.id)
+              .limit(1)
+              .get()
           )
         );
-        hasPendingReview = reviewCounts.some((r) => r.count === 0);
+        hasPendingReview = reviewCounts.some((snap) => snap.empty);
       }
     }
 
-    if (activeReq) {
-      if (activeReq.status === "two_person_offered") {
-        // Fetch partner request to find overlapping proposed dates
+    if (!activeReqSnap.empty) {
+      const activeReqDoc = activeReqSnap.docs[0];
+      const activeReq = { id: activeReqDoc.id, ...activeReqDoc.data() } as {
+        id: string;
+        status: string;
+        available_dates: string[];
+        two_person_partner_id?: string;
+        updated_at: string;
+      };
+
+      if (activeReq.status === "two_person_offered" || activeReq.status === "two_person_accepted") {
         let proposedDates: string[] = [];
         if (activeReq.two_person_partner_id) {
-          const { data: partnerReq } = await supabaseAdmin
-            .from("match_requests")
-            .select("available_dates")
-            .eq("id", activeReq.two_person_partner_id)
-            .single();
+          const partnerDoc = await adminDb
+            .collection("match_requests")
+            .doc(activeReq.two_person_partner_id)
+            .get();
 
-          if (partnerReq) {
+          if (partnerDoc.exists) {
             const today = new Date().toISOString().split("T")[0];
             const myDates: string[] = activeReq.available_dates || [];
-            const partnerDates: string[] = partnerReq.available_dates || [];
+            const partnerDates: string[] = partnerDoc.data()!.available_dates || [];
             const partnerSet = new Set(partnerDates);
-            proposedDates = myDates
-              .filter((d: string) => partnerSet.has(d) && d >= today)
-              .sort();
+            proposedDates = myDates.filter((d) => partnerSet.has(d) && d >= today).sort();
           }
         }
 
@@ -83,36 +91,22 @@ export async function GET(request: Request) {
       }
 
       if (activeReq.status === "no_match") {
-        // Only return no_match if within last 7 days
         const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
         if (activeReq.updated_at >= sevenDaysAgo) {
           return NextResponse.json({ status: "no_match", hasPendingReview });
         }
-        // Older than 7 days — fall through to check active groups
       } else if (activeReq.status === "waiting") {
         return NextResponse.json({ status: "waiting", request: activeReq, hasPendingReview });
       }
     }
 
     if (activeGroupIds.length > 0) {
-      // グループ + メンバー情報を1クエリで取得（直列ウォーターフォール排除）
-      const { data: activeGroup } = await supabaseAdmin
-        .from("match_groups")
-        .select("*, match_group_members(user_id, users(id, nickname, birth_year, industry, avatar_emoji, bio))")
-        .in("id", activeGroupIds)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-
-      if (activeGroup) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const { match_group_members, ...group } = activeGroup as any;
-        const members = match_group_members?.map((m: { users: unknown }) => m.users);
-
+      const result = await getGroupWithMembers(activeGroupIds[0]);
+      if (result) {
         return NextResponse.json({
           status: "matched",
-          group,
-          members,
+          group: result.group,
+          members: result.members,
           hasPendingReview,
         });
       }

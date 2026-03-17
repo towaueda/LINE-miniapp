@@ -1,55 +1,77 @@
 import { NextResponse } from "next/server";
 import { verifyAdmin } from "../auth/route";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { adminDb } from "@/lib/firebase/admin";
 
 export async function GET(request: Request) {
   if (!(await verifyAdmin(request))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // 全クエリを単一のPromise.allで並列実行
   const [
-    { count: totalUsers },
-    { count: bannedUsers },
-    { count: totalMatches },
-    { count: activeMatches },
-    { count: totalReviews },
-    { count: totalInvites },
-    { count: usedInvites },
-    { data: reviewAvg },
-    { data: recentUsers },
-    { data: recentMatches },
+    usersSnap,
+    matchGroupsSnap,
+    reviewsSnap,
+    inviteCodesSnap,
+    recentUsersSnap,
+    recentMatchesSnap,
   ] = await Promise.all([
-    supabaseAdmin.from("users").select("*", { count: "exact", head: true }),
-    supabaseAdmin.from("users").select("*", { count: "exact", head: true }).eq("is_banned", true),
-    supabaseAdmin.from("match_groups").select("*", { count: "exact", head: true }),
-    supabaseAdmin.from("match_groups").select("*", { count: "exact", head: true }).in("status", ["pending", "confirmed"]),
-    supabaseAdmin.from("reviews").select("*", { count: "exact", head: true }),
-    supabaseAdmin.from("invite_codes").select("*", { count: "exact", head: true }),
-    supabaseAdmin.from("invite_codes").select("*", { count: "exact", head: true }).not("used_by", "is", null),
-    supabaseAdmin.rpc("review_averages").single() as unknown as Promise<{ data: { avg_communication: number; avg_punctuality: number; avg_meet_again: number } | null }>,
-    supabaseAdmin.from("users").select("id, nickname, created_at").order("created_at", { ascending: false }).limit(5),
-    supabaseAdmin.from("match_groups").select("id, area, date, status, created_at").order("created_at", { ascending: false }).limit(5),
+    adminDb.collection("users").get(),
+    adminDb.collection("match_groups").get(),
+    adminDb.collection("reviews").get(),
+    adminDb.collection("invite_codes").get(),
+    adminDb.collection("users").orderBy("created_at", "desc").limit(5).get(),
+    adminDb.collection("match_groups").orderBy("created_at", "desc").limit(5).get(),
   ]);
 
-  const avgCommunication = reviewAvg?.avg_communication ?? 0;
-  const avgPunctuality = reviewAvg?.avg_punctuality ?? 0;
-  const avgMeetAgain = reviewAvg?.avg_meet_again ?? 0;
+  const totalUsers = usersSnap.size;
+  const bannedUsers = usersSnap.docs.filter((d) => d.data().is_banned).length;
+  const totalMatches = matchGroupsSnap.size;
+  const activeMatches = matchGroupsSnap.docs.filter((d) =>
+    ["pending", "confirmed"].includes(d.data().status)
+  ).length;
+  const totalReviews = reviewsSnap.size;
+  const totalInvites = inviteCodesSnap.size;
+  const usedInvites = inviteCodesSnap.docs.filter((d) => d.data().used_by !== null).length;
+
+  // レビュー平均を計算
+  let sumCommunication = 0, sumPunctuality = 0, sumMeetAgain = 0;
+  reviewsSnap.docs.forEach((d) => {
+    sumCommunication += d.data().communication || 0;
+    sumPunctuality += d.data().punctuality || 0;
+    sumMeetAgain += d.data().meet_again || 0;
+  });
+  const count = reviewsSnap.size || 1;
+  const avgCommunication = Math.round((sumCommunication / count) * 10) / 10;
+  const avgPunctuality = Math.round((sumPunctuality / count) * 10) / 10;
+  const avgMeetAgain = Math.round((sumMeetAgain / count) * 10) / 10;
+
+  const recentUsers = recentUsersSnap.docs.map((d) => ({
+    id: d.id,
+    nickname: d.data().nickname,
+    created_at: d.data().created_at,
+  }));
+  const recentMatches = recentMatchesSnap.docs.map((d) => ({
+    id: d.id,
+    area: d.data().area,
+    date: d.data().date,
+    status: d.data().status,
+    created_at: d.data().created_at,
+  }));
 
   return NextResponse.json({
     stats: {
-      totalUsers: totalUsers || 0,
-      bannedUsers: bannedUsers || 0,
-      totalMatches: totalMatches || 0,
-      activeMatches: activeMatches || 0,
-      totalReviews: totalReviews || 0,
-      totalInvites: totalInvites || 0,
-      usedInvites: usedInvites || 0,
-      avgCommunication: Math.round(avgCommunication * 10) / 10,
-      avgPunctuality: Math.round(avgPunctuality * 10) / 10,
-      avgMeetAgain: Math.round(avgMeetAgain * 10) / 10,
+      totalUsers,
+      bannedUsers,
+      totalMatches,
+      activeMatches,
+      totalReviews,
+      totalInvites,
+      usedInvites,
+      avgCommunication,
+      avgPunctuality,
+      avgMeetAgain,
     },
-    recentUsers: recentUsers || [],
-    recentMatches: recentMatches || [],
+    recentUsers,
+    recentMatches,
   });
 }

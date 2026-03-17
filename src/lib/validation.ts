@@ -4,7 +4,8 @@ import { INDUSTRY_OPTIONS } from "@/types/constants";
 const VALID_AREAS = new Set<AreaOption>(["umeda", "yodoyabashi", "honmachi", "namba", "tennoji"]);
 const VALID_INDUSTRIES = new Set(INDUSTRY_OPTIONS.map((o) => o.value));
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+// Firestore の自動生成ID（20文字の英数字）
+const UUID_RE = /^[0-9a-zA-Z]{20}$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function isValidArea(v: unknown): v is AreaOption {

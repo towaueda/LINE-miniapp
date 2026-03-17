@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { verifyAdmin } from "../auth/route";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { adminDb } from "@/lib/firebase/admin";
 
 export async function GET(request: Request) {
   if (!(await verifyAdmin(request))) {
@@ -12,34 +12,35 @@ export async function GET(request: Request) {
   const page = Math.max(1, parseInt(url.searchParams.get("page") || "1", 10));
   const limit = Math.min(100, Math.max(1, parseInt(url.searchParams.get("limit") || "20", 10)));
   const filter = url.searchParams.get("filter") || "all";
-  const offset = (page - 1) * limit;
 
-  let query = supabaseAdmin
-    .from("users")
-    .select("*", { count: "exact" });
-
-  if (search) {
-    query = query.or(`nickname.ilike.%${search}%,line_user_id.ilike.%${search}%`);
-  }
+  let query = adminDb.collection("users").orderBy("created_at", "desc") as FirebaseFirestore.Query;
 
   if (filter === "banned") {
-    query = query.eq("is_banned", true);
+    query = query.where("is_banned", "==", true);
   } else if (filter === "active") {
-    query = query.eq("is_banned", false);
+    query = query.where("is_banned", "==", false);
   }
 
-  const { data, count, error } = await query
-    .order("created_at", { ascending: false })
-    .range(offset, offset + limit - 1);
+  const snap = await query.get();
+  let docs = snap.docs;
 
-  if (error) {
-    return NextResponse.json({ error: "Failed to fetch users" }, { status: 500 });
+  // 検索はクライアントサイドでフィルタ（Firestoreはfull-text searchが非対応）
+  if (search) {
+    const lower = search.toLowerCase();
+    docs = docs.filter((d) => {
+      const data = d.data();
+      return (
+        (data.nickname && data.nickname.toLowerCase().includes(lower)) ||
+        (data.line_user_id && data.line_user_id.toLowerCase().includes(lower))
+      );
+    });
   }
 
-  return NextResponse.json({
-    users: data || [],
-    total: count || 0,
-    page,
-    limit,
-  });
+  const total = docs.length;
+  const offset = (page - 1) * limit;
+  const pageDocs = docs.slice(offset, offset + limit);
+
+  const users = pageDocs.map((d) => ({ id: d.id, ...d.data() }));
+
+  return NextResponse.json({ users, total, page, limit });
 }

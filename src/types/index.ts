@@ -69,17 +69,6 @@ export interface DbUser {
   updated_at: string;
 }
 
-export interface DbMatchRequest {
-  id: string;
-  user_id: string;
-  area: AreaOption;
-  available_dates: string[];
-  status: "waiting" | "matched" | "expired" | "cancelled";
-  matched_group_id: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
 export interface DbMatchGroup {
   id: string;
   area: AreaOption;
@@ -149,11 +138,3 @@ export interface DbNotification {
   created_at: string;
 }
 
-export interface DbRestaurant {
-  id: string;
-  name: string;
-  area: AreaOption;
-  address: string | null;
-  description: string | null;
-  created_at: string;
-}

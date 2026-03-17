@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
-import { supabaseAdmin } from "@/lib/supabase/server";
+import { adminDb } from "@/lib/firebase/admin";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
@@ -16,7 +16,6 @@ export async function GET(
 
   const { groupId } = params;
 
-  // ページネーションパラメータの解析
   const url = new URL(request.url);
   const limitParam = parseInt(url.searchParams.get("limit") || "", 10);
   const limit = Math.min(
@@ -25,37 +24,31 @@ export async function GET(
   );
   const before = url.searchParams.get("before");
 
-  // メンバーシップ確認 + メッセージ取得を並列実行
-  let msgQuery = supabaseAdmin
-    .from("messages")
-    .select("*")
-    .eq("group_id", groupId)
-    .order("created_at", { ascending: false })
+  // メンバーシップ確認とメッセージ取得を並列実行
+  const membershipPromise = adminDb
+    .collection("match_group_members")
+    .where("group_id", "==", groupId)
+    .where("user_id", "==", user.id)
+    .limit(1)
+    .get();
+
+  let msgQuery = adminDb
+    .collection("messages")
+    .where("group_id", "==", groupId)
+    .orderBy("created_at", "desc")
     .limit(limit + 1);
 
   if (before) {
-    msgQuery = msgQuery.lt("created_at", before);
+    msgQuery = msgQuery.where("created_at", "<", before) as typeof msgQuery;
   }
 
-  const [{ data: membership }, { data: rows, error }] = await Promise.all([
-    supabaseAdmin
-      .from("match_group_members")
-      .select("id")
-      .eq("group_id", groupId)
-      .eq("user_id", user.id)
-      .single(),
-    msgQuery,
-  ]);
+  const [membershipSnap, messagesSnap] = await Promise.all([membershipPromise, msgQuery.get()]);
 
-  if (!membership) {
+  if (membershipSnap.empty) {
     return NextResponse.json({ error: "このグループのメンバーではありません" }, { status: 403 });
   }
 
-  if (error) {
-    return NextResponse.json({ error: "メッセージの読み込みに失敗しました" }, { status: 500 });
-  }
-
-  const allRows = rows || [];
+  const allRows = messagesSnap.docs.map((d) => ({ id: d.id, ...d.data() } as { id: string; created_at: string; [key: string]: unknown }));
   const hasMore = allRows.length > limit;
   const pageRows = hasMore ? allRows.slice(0, limit) : allRows;
 
