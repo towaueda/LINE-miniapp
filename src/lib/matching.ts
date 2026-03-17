@@ -1,5 +1,4 @@
 import { adminDb } from "@/lib/firebase/admin";
-import { FieldValue } from "firebase-admin/firestore";
 
 /**
  * try_match_atomic の代替：新規リクエストに対してマッチングを試みる
