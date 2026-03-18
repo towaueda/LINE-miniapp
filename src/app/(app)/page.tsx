@@ -2,10 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useLiff } from "@/components/LiffProvider";
+import { getLiff } from "@/lib/liff";
 import { useEffect, useState } from "react";
 
+const PENDING_PROFILE_KEY = "triangle_pending_profile";
+
 export default function Home() {
-  const { isReady, user, login } = useLiff();
+  const { isReady, user, login, isLiffMode, setDbUser } = useLiff();
   const router = useRouter();
   const [inviteCode, setInviteCode] = useState("");
   const [inviteError, setInviteError] = useState("");
@@ -13,7 +16,13 @@ export default function Home() {
 
   useEffect(() => {
     if (isReady && user?.isLoggedIn && user.nickname) {
-      router.push("/matching");
+      const pendingProfile = sessionStorage.getItem(PENDING_PROFILE_KEY);
+      if (pendingProfile) {
+        sessionStorage.removeItem(PENDING_PROFILE_KEY);
+        router.push("/profile");
+      } else {
+        router.push("/matching");
+      }
     }
   }, [isReady, user?.isLoggedIn, user?.nickname, router]);
 
@@ -49,11 +58,39 @@ export default function Home() {
       console.warn("Invite validation API unreachable, skipping");
     }
 
-    setValidating(false);
-    // Store invite code for login flow
     sessionStorage.setItem("triangle_invite_code", inviteCode.trim());
-    login();
-    router.push("/profile");
+    sessionStorage.setItem(PENDING_PROFILE_KEY, "1");
+
+    const liffInstance = getLiff();
+    const alreadyLoggedIn = isLiffMode && liffInstance && (liffInstance.isInClient() || liffInstance.isLoggedIn());
+
+    if (alreadyLoggedIn) {
+      // LINEアプリ内など既にログイン済みの場合、招待コードをバックエンドに直接送信
+      const accessToken = liffInstance.getAccessToken();
+      if (accessToken) {
+        try {
+          const res = await fetch("/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ accessToken, inviteCode: inviteCode.trim() }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            setDbUser(data.user);
+            sessionStorage.removeItem("triangle_invite_code");
+          }
+        } catch (e) {
+          console.error("Login with invite code failed:", e);
+        }
+      }
+      sessionStorage.removeItem(PENDING_PROFILE_KEY);
+      setValidating(false);
+      router.push("/profile");
+    } else {
+      // ブラウザなど未ログインの場合、LINE OAuthへ（招待コードとリダイレクト先はsessionStorageに保存済み）
+      setValidating(false);
+      login();
+    }
   };
 
   return (

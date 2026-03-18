@@ -1,9 +1,21 @@
 import { NextResponse } from "next/server";
 import { createHash } from "crypto";
+import { adminDb } from "@/lib/firebase/admin";
 
-function verifyInviteCode(code: string): boolean {
+function verifyMasterCode(code: string): boolean {
   const hash = createHash("sha256").update(code).digest("hex");
   return hash === process.env.INVITE_CODE_HASH;
+}
+
+async function verifyUserInviteCode(code: string): Promise<boolean> {
+  const snap = await adminDb
+    .collection("invite_codes")
+    .where("code", "==", code)
+    .where("is_active", "==", true)
+    .where("used_by", "==", null)
+    .limit(1)
+    .get();
+  return !snap.empty;
 }
 
 // インメモリレートリミッター（IP単位、1分間に10回まで）
@@ -50,7 +62,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "code required" }, { status: 400 });
     }
 
-    const valid = verifyInviteCode(code.trim());
+    const trimmed = code.trim();
+    const valid = verifyMasterCode(trimmed) || await verifyUserInviteCode(trimmed);
     return NextResponse.json({ valid });
   } catch {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
