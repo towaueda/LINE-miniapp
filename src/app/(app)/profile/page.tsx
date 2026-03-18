@@ -57,7 +57,7 @@ export default function ProfilePage() {
     setUser(updatedUser);
 
     // Save to backend if in LIFF mode
-    if (isLiffMode && dbUser) {
+    if (isLiffMode) {
       try {
         const data = await apiFetch<{ user: import("@/types").DbUser }>("/api/users/profile", {
           method: "PUT",
@@ -74,6 +74,8 @@ export default function ProfilePage() {
         setDbUser(data.user);
       } catch (e) {
         console.error("Failed to save profile:", e);
+        setSaving(false);
+        return;
       }
     }
 
