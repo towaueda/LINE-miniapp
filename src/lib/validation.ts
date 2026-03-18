@@ -28,16 +28,19 @@ export function validateDates(dates: unknown): { valid: false; reason: string } 
     if (typeof d !== "string" || !DATE_RE.test(d)) {
       return { valid: false, reason: `無効な日付形式です: ${d}` };
     }
-    const dt = new Date(d + "T00:00:00+09:00"); // JST
+    // 日付文字列をパーツに分解してUTCミッドナイトで比較（タイムゾーン非依存）
+    const [year, month, day] = d.split("-").map(Number);
+    const dt = new Date(Date.UTC(year, month - 1, day));
     if (isNaN(dt.getTime())) {
       return { valid: false, reason: `無効な日付です: ${d}` };
     }
-    if (dt.getDay() !== 4) {
+    // 曜日はUTC日付文字列のまま判定（タイムゾーンに左右されない）
+    if (dt.getUTCDay() !== 4) {
       return { valid: false, reason: `${d} は木曜日ではありません` };
     }
     // 未来の日付のみ許可（JST基準）
     const jstNow = new Date(Date.now() + 9 * 60 * 60 * 1000);
-    const jstToday = new Date(jstNow.getFullYear(), jstNow.getMonth(), jstNow.getDate());
+    const jstToday = new Date(Date.UTC(jstNow.getUTCFullYear(), jstNow.getUTCMonth(), jstNow.getUTCDate()));
     if (dt < jstToday) {
       return { valid: false, reason: `${d} は過去の日付です` };
     }
