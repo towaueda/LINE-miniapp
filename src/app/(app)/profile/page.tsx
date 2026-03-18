@@ -10,7 +10,7 @@ import { apiFetch } from "@/lib/api";
 const currentYear = new Date().getFullYear();
 
 export default function ProfilePage() {
-  const { user, setUser, dbUser, setDbUser, isLiffMode } = useLiff();
+  const { user, setUser, setDbUser, isLiffMode } = useLiff();
   const router = useRouter();
 
   const [nickname, setNickname] = useState("");
