@@ -7,8 +7,6 @@ import { useEffect, useState, useRef } from "react";
 
 const PENDING_PROFILE_KEY = "triangle_pending_profile";
 
-type ModalType = "terms" | "privacy" | null;
-
 export default function Home() {
   const { isReady, user, login, isLiffMode, setDbUser, dbUser } = useLiff();
   const router = useRouter();
@@ -16,9 +14,7 @@ export default function Home() {
   const [inviteError, setInviteError] = useState("");
   const [validating, setValidating] = useState(false);
 
-  const [openModal, setOpenModal] = useState<ModalType>(null);
-  const [termsRead, setTermsRead] = useState(false);
-  const [privacyRead, setPrivacyRead] = useState(false);
+  const [openModal, setOpenModal] = useState(false);
   const [agreed, setAgreed] = useState(false);
 
   useEffect(() => {
@@ -157,42 +153,22 @@ export default function Home() {
         </div>
 
         {/* Terms Agreement */}
-        <div className="w-full max-w-sm mb-4">
-          <label className="flex items-start gap-2.5 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={agreed}
-              onChange={(e) => setAgreed(e.target.checked)}
-              disabled={!termsRead || !privacyRead}
-              className="mt-0.5 w-4 h-4 accent-orange flex-shrink-0 disabled:cursor-not-allowed"
-            />
-            <span className="text-xs text-gray-600 leading-relaxed">
-              <button
-                type="button"
-                onClick={() => setOpenModal("terms")}
-                className="text-orange underline underline-offset-2"
-              >
-                利用規約
-              </button>
-              {"および"}
-              <button
-                type="button"
-                onClick={() => setOpenModal("privacy")}
-                className="text-orange underline underline-offset-2"
-              >
-                プライバシーポリシー
-              </button>
-              に同意する
-            </span>
-          </label>
-          {(!termsRead || !privacyRead) && (
-            <p className="text-[11px] text-gray-400 mt-1.5 pl-6">
-              {!termsRead && !privacyRead
-                ? "利用規約とプライバシーポリシーを最後までお読みください"
-                : !termsRead
-                ? "利用規約を最後までお読みください"
-                : "プライバシーポリシーを最後までお読みください"}
+        <div className="w-full max-w-sm mb-4 text-center">
+          {agreed ? (
+            <p className="text-xs text-green-600 font-medium">
+              ✓ 利用規約・プライバシーポリシーに同意済み
             </p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setOpenModal(true)}
+              className="text-xs text-gray-500"
+            >
+              <span className="text-orange underline underline-offset-2">
+                利用規約・プライバシーポリシー
+              </span>
+              をご確認のうえ同意してください
+            </button>
           )}
         </div>
 
@@ -209,12 +185,10 @@ export default function Home() {
       {/* Modal */}
       {openModal && (
         <DocumentModal
-          type={openModal}
-          onClose={() => setOpenModal(null)}
-          onRead={() => {
-            if (openModal === "terms") setTermsRead(true);
-            if (openModal === "privacy") setPrivacyRead(true);
-            setOpenModal(null);
+          onClose={() => setOpenModal(false)}
+          onAgree={() => {
+            setAgreed(true);
+            setOpenModal(false);
           }}
         />
       )}
@@ -243,13 +217,11 @@ function FeatureCard({
 }
 
 function DocumentModal({
-  type,
   onClose,
-  onRead,
+  onAgree,
 }: {
-  type: "terms" | "privacy";
   onClose: () => void;
-  onRead: () => void;
+  onAgree: () => void;
 }) {
   const [reachedBottom, setReachedBottom] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -261,15 +233,12 @@ function DocumentModal({
     if (atBottom) setReachedBottom(true);
   };
 
-  const isTerms = type === "terms";
-  const title = isTerms ? "利用規約" : "プライバシーポリシー";
-
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50">
       <div className="w-full max-w-lg bg-white rounded-t-2xl flex flex-col max-h-[85dvh]">
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 flex-shrink-0">
-          <h2 className="font-bold text-base text-foreground">{title}</h2>
+          <h2 className="font-bold text-base text-foreground">利用規約・プライバシーポリシー</h2>
           <button
             onClick={onClose}
             className="text-gray-400 text-xl leading-none p-1"
@@ -291,15 +260,19 @@ function DocumentModal({
           onScroll={handleScroll}
           className="flex-1 overflow-y-auto px-5 py-4 text-sm text-gray-700 leading-relaxed space-y-4"
         >
-          {isTerms ? <TermsContent /> : <PrivacyContent />}
-          {/* Bottom padding so last line is clearly visible */}
+          <h3 className="font-bold text-base text-foreground">利用規約</h3>
+          <TermsContent />
+          <div className="border-t border-gray-200 pt-4">
+            <h3 className="font-bold text-base text-foreground mb-4">プライバシーポリシー</h3>
+            <PrivacyContent />
+          </div>
           <div className="h-4" />
         </div>
 
         {/* Footer Button */}
         <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0">
           <button
-            onClick={onRead}
+            onClick={onAgree}
             disabled={!reachedBottom}
             className="w-full py-3 rounded-xl font-bold text-sm transition-all bg-orange disabled:bg-gray-200 disabled:text-gray-400 text-white disabled:cursor-not-allowed"
           >
