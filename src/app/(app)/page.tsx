@@ -86,7 +86,6 @@ export default function Home() {
       } catch (e) {
         console.error("Login with invite code failed:", e);
       }
-      sessionStorage.removeItem(PENDING_PROFILE_KEY);
       setValidating(false);
       router.push("/profile");
     } else {
