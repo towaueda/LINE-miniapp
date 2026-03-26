@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useLiff } from "@/components/LiffProvider";
 import type { AreaOption } from "@/types";
 import { AGE_OPTIONS, AREA_LABELS, INDUSTRY_OPTIONS } from "@/types/constants";
+import { AVATAR_EMOJIS } from "@/lib/emoji";
 import { apiFetch } from "@/lib/api";
 
 const currentYear = new Date().getFullYear();
@@ -19,6 +20,7 @@ export default function ProfilePage() {
   const [industry, setIndustry] = useState<string>("");
   const [company, setCompany] = useState("");
   const [bio, setBio] = useState("");
+  const [avatarEmoji, setAvatarEmoji] = useState("");
   const initialized = useRef(false);
 
   useEffect(() => {
@@ -34,10 +36,11 @@ export default function ProfilePage() {
       if (user.industry) setIndustry(user.industry);
       if (user.company) setCompany(user.company);
       if (user.bio) setBio(user.bio);
+      if (user.avatarEmoji) setAvatarEmoji(user.avatarEmoji);
     }
   }, [user, router]);
 
-  const isValid = nickname.trim() && area && industry && company.trim() && bio.trim();
+  const isValid = nickname.trim() && area && industry && company.trim() && bio.trim() && avatarEmoji;
 
   const [saving, setSaving] = useState(false);
 
@@ -53,6 +56,7 @@ export default function ProfilePage() {
       industry,
       company: company.trim(),
       bio: bio.trim(),
+      avatarEmoji,
     };
     setUser(updatedUser);
 
@@ -93,6 +97,26 @@ export default function ProfilePage() {
       </p>
 
       <div className="space-y-5">
+        {/* Avatar Emoji */}
+        <Field label="アイコン" required>
+          <div className="flex flex-wrap gap-3">
+            {AVATAR_EMOJIS.map((emoji) => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => setAvatarEmoji(emoji)}
+                className={`w-12 h-12 text-2xl rounded-xl border-2 transition-all ${
+                  avatarEmoji === emoji
+                    ? "border-orange bg-orange/10"
+                    : "border-gray-200 bg-white"
+                }`}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+        </Field>
+
         {/* Nickname */}
         <Field label="ニックネーム" required>
           <input

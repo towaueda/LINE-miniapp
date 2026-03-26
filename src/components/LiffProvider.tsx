@@ -14,7 +14,6 @@ function LineOnlyScreen() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-white px-6 text-center">
-      <div className="text-5xl mb-6">📱</div>
       <h1 className="text-xl font-bold text-gray-800 mb-3">LINEアプリで開いてください</h1>
       <p className="text-gray-500 text-sm mb-6">
         このアプリはLINEミニアプリです。<br />
