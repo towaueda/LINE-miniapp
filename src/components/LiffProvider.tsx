@@ -58,6 +58,7 @@ function saveUser(user: UserProfile | null) {
 export default function LiffProvider({ children }: { children: ReactNode }) {
   const [isReady, setIsReady] = useState(false);
   const [isLiffMode, setIsLiffMode] = useState(false);
+  const [isBrowserBlocked, setIsBrowserBlocked] = useState(false);
   const [user, setUserState] = useState<UserProfile | null>(null);
   const [dbUser, setDbUserState] = useState<DbUser | null>(null);
 
@@ -69,6 +70,12 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
       setIsLiffMode(liffReady);
       if (liffReady) {
         const liffInstance = getLiff();
+        // LINEアプリ外からのアクセスをブロック
+        if (liffInstance && !liffInstance.isInClient() && !liffInstance.isLoggedIn()) {
+          setIsBrowserBlocked(true);
+          setIsReady(true);
+          return;
+        }
         if (liffInstance && (liffInstance.isInClient() || liffInstance.isLoggedIn())) {
           const profile = await getLiffProfile();
           if (profile) {
@@ -168,6 +175,25 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
     () => ({ isReady, isLiffMode, user, dbUser, setUser, setDbUser, login, logout }),
     [isReady, isLiffMode, user, dbUser, setUser, setDbUser, login, logout]
   );
+
+  if (isBrowserBlocked) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-white px-6 text-center">
+        <div className="text-5xl mb-6">📱</div>
+        <h1 className="text-xl font-bold text-gray-800 mb-3">LINEアプリで開いてください</h1>
+        <p className="text-gray-500 text-sm mb-6">
+          このアプリはLINEミニアプリです。<br />
+          ブラウザからは使用できません。
+        </p>
+        <a
+          href="https://line.me/R/app/2009615380-5WPXf9SG"
+          className="inline-block bg-[#06C755] text-white font-bold py-3 px-8 rounded-full text-sm"
+        >
+          LINEで開く
+        </a>
+      </div>
+    );
+  }
 
   return (
     <LiffContext.Provider value={value}>
