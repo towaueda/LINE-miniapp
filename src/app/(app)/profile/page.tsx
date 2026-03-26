@@ -37,7 +37,7 @@ export default function ProfilePage() {
     }
   }, [user, router]);
 
-  const isValid = nickname.trim() && area && industry;
+  const isValid = nickname.trim() && area && industry && company.trim() && bio.trim();
 
   const [saving, setSaving] = useState(false);
 

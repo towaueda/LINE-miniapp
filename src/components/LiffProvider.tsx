@@ -1,9 +1,45 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, useCallback, useMemo, ReactNode } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import type { UserProfile, DbUser } from "@/types";
 import { initLiff, getLiffProfile, liffLogin, getLiff } from "@/lib/liff";
 import { getRandomEmoji } from "@/lib/emoji";
+
+const LIFF_URL = "https://liff.line.me/2009615380-5WPXf9SG";
+
+function LineOnlyScreen() {
+  const isMobile = typeof navigator !== "undefined" &&
+    /iPhone|Android/i.test(navigator.userAgent);
+
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen bg-white px-6 text-center">
+      <div className="text-5xl mb-6">📱</div>
+      <h1 className="text-xl font-bold text-gray-800 mb-3">LINEアプリで開いてください</h1>
+      <p className="text-gray-500 text-sm mb-6">
+        このアプリはLINEミニアプリです。<br />
+        ブラウザからは使用できません。
+      </p>
+      {isMobile ? (
+        <a
+          href={`https://line.me/R/app/2009615380-5WPXf9SG`}
+          className="inline-block bg-[#06C755] text-white font-bold py-3 px-8 rounded-full text-sm"
+        >
+          LINEで開く
+        </a>
+      ) : (
+        <div className="flex flex-col items-center gap-4">
+          <div className="p-4 bg-white border border-gray-200 rounded-2xl shadow-sm">
+            <QRCodeSVG value={LIFF_URL} size={180} />
+          </div>
+          <p className="text-gray-400 text-xs">
+            スマートフォンのカメラでQRコードを読み取り、<br />LINEで開いてください
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface LiffContextType {
   isReady: boolean;
@@ -177,22 +213,7 @@ export default function LiffProvider({ children }: { children: ReactNode }) {
   );
 
   if (isBrowserBlocked) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-white px-6 text-center">
-        <div className="text-5xl mb-6">📱</div>
-        <h1 className="text-xl font-bold text-gray-800 mb-3">LINEアプリで開いてください</h1>
-        <p className="text-gray-500 text-sm mb-6">
-          このアプリはLINEミニアプリです。<br />
-          ブラウザからは使用できません。
-        </p>
-        <a
-          href="https://line.me/R/app/2009615380-5WPXf9SG"
-          className="inline-block bg-[#06C755] text-white font-bold py-3 px-8 rounded-full text-sm"
-        >
-          LINEで開く
-        </a>
-      </div>
-    );
+    return <LineOnlyScreen />;
   }
 
   return (
