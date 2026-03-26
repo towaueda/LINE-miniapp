@@ -27,3 +27,5 @@ export const AGE_OPTIONS: number[] = [];
 for (let a = 24; a <= 30; a++) {
   AGE_OPTIONS.push(a);
 }
+
+export const CHAT_DEADLINE_SUFFIX = "T23:59:59+09:00";

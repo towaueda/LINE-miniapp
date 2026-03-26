@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomBytes } from "crypto";
 import { authenticateRequest } from "@/lib/auth";
 import { adminDb } from "@/lib/firebase/admin";
 import { validateReviewScore, validateReviewComment } from "@/lib/validation";
@@ -80,7 +81,7 @@ export async function POST(request: Request) {
     await batch.commit();
 
     // 招待コード生成（レスポンスをブロックしない）
-    const code = `TRI-${Math.random().toString(36).substring(2, 8).toUpperCase()}`;
+    const code = `TRI-${randomBytes(3).toString("hex").toUpperCase()}`;
     adminDb.collection("invite_codes").add({
       code,
       generated_by: user.id,

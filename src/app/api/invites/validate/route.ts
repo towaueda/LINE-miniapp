@@ -29,9 +29,15 @@ const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 
 function checkRateLimit(ip: string): boolean {
   const now = Date.now();
+
+  // 期限切れエントリをクリーンアップ
+  rateLimit.forEach((val, key) => {
+    if (val.resetAt < now) rateLimit.delete(key);
+  });
+
   const entry = rateLimit.get(ip);
 
-  if (!entry || entry.resetAt < now) {
+  if (!entry) {
     rateLimit.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
     return true;
   }

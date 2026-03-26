@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { authenticateRequest } from "@/lib/auth";
 import { adminDb } from "@/lib/firebase/admin";
 import { validateMessageText } from "@/lib/validation";
+import { CHAT_DEADLINE_SUFFIX } from "@/types/constants";
 
 export async function POST(
   request: Request,
@@ -41,7 +42,7 @@ export async function POST(
     return NextResponse.json({ error: "このグループのチャットは終了しています" }, { status: 403 });
   }
 
-  const matchDate = new Date(group.date + "T23:59:59+09:00");
+  const matchDate = new Date(group.date + CHAT_DEADLINE_SUFFIX);
   if (Date.now() > matchDate.getTime()) {
     return NextResponse.json({ error: "チャット期限が過ぎています" }, { status: 403 });
   }

@@ -6,6 +6,7 @@ import { useLiff } from "@/components/LiffProvider";
 import type { MatchGroup } from "@/types";
 import { useRealtimeChat } from "@/hooks/useRealtimeChat";
 import { apiFetch } from "@/lib/api";
+import { CHAT_DEADLINE_SUFFIX } from "@/types/constants";
 
 const MATCH_KEY = "triangle_match";
 const CHAT_KEY = "triangle_chat";
@@ -18,8 +19,7 @@ const SendIcon = (
 
 
 function getChatDeadline(matchDate: string): Date {
-  const deadline = new Date(matchDate + "T23:59:00");
-  return deadline;
+  return new Date(matchDate + CHAT_DEADLINE_SUFFIX);
 }
 
 function isChatExpired(matchDate: string): boolean {
