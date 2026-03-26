@@ -153,7 +153,7 @@ export default function ProfilePage() {
         </Field>
 
         {/* Company */}
-        <Field label="会社名" optional>
+        <Field label="会社名" required>
           <input
             type="text"
             value={company}
@@ -165,7 +165,7 @@ export default function ProfilePage() {
         </Field>
 
         {/* Bio */}
-        <Field label="自己紹介" optional>
+        <Field label="自己紹介" required>
           <textarea
             value={bio}
             onChange={(e) => setBio(e.target.value)}

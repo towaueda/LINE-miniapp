@@ -76,7 +76,7 @@ export default function MatchingPage() {
 
   const userLoggedIn = user?.isLoggedIn;
   const userArea = user?.area;
-  const isProfileComplete = !!(user?.nickname && user?.area && user?.industry);
+  const isProfileComplete = !!(user?.nickname && user?.area && user?.industry && user?.company && user?.bio);
 
   // Check existing match status on mount
   const checkStatus = useCallback(async () => {
