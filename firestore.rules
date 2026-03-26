@@ -3,15 +3,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // messages コレクション: クライアントSDK の onSnapshot 用に読み取りのみ許可
-    // 書き込みは全て Admin SDK (サーバー側) 経由のため拒否
-    match /messages/{messageId} {
-      allow read: if true;
-      allow write: if false;
-    }
-
-    // その他のコレクションは全てサーバー側 (Admin SDK) からのみアクセス
-    // クライアントからの直接アクセスは不要なため全て拒否
+    // 全コレクション: クライアントSDKからの直接アクセスは不要
+    // 読み書き全てサーバー側 (Admin SDK) 経由のみ許可
     match /{document=**} {
       allow read, write: if false;
     }

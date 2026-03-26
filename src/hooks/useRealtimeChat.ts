@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { collection, query, where, orderBy, onSnapshot, limit, Query, DocumentData } from "firebase/firestore";
 import type { ChatMessage } from "@/types";
 import { apiFetch } from "@/lib/api";
 
@@ -41,8 +40,6 @@ export function useRealtimeChat(groupId: string | null) {
   const [hasMore, setHasMore] = useState(false);
   const nextCursorRef = useRef<string | null>(null);
   const loadingMoreRef = useRef(false);
-  const unsubscribeRef = useRef<(() => void) | null>(null);
-
   // 初期履歴の読み込み
   useEffect(() => {
     if (!groupId) {
@@ -63,58 +60,7 @@ export function useRealtimeChat(groupId: string | null) {
       .finally(() => setLoading(false));
   }, [groupId]);
 
-  // Firestore リアルタイム購読
-  useEffect(() => {
-    if (!groupId) return;
-    if (unsubscribeRef.current) return;
-
-    import("@/lib/firebase/client").then(({ db }) => {
-      const q = query(
-        collection(db, "messages"),
-        where("group_id", "==", groupId),
-        orderBy("created_at", "desc"),
-        limit(1)
-      ) as Query<DocumentData>;
-
-      const unsubscribe = onSnapshot(
-        q,
-        (snapshot) => {
-          snapshot.docChanges().forEach((change) => {
-            if (change.type === "added") {
-              const data = change.doc.data();
-              const newMsg = dbToChat({
-                id: change.doc.id,
-                group_id: data.group_id,
-                sender_id: data.sender_id,
-                sender_name: data.sender_name,
-                text: data.text,
-                is_system: data.is_system,
-                created_at: data.created_at,
-              });
-              setMessages((prev) => {
-                if (prev.some((m) => m.id === newMsg.id)) return prev;
-                return [...prev, newMsg];
-              });
-            }
-          });
-        },
-        (error) => {
-          console.error("Firestore chat subscription error:", error);
-        }
-      );
-
-      unsubscribeRef.current = unsubscribe;
-    });
-
-    return () => {
-      if (unsubscribeRef.current) {
-        unsubscribeRef.current();
-        unsubscribeRef.current = null;
-      }
-    };
-  }, [groupId]);
-
-  // ポーリングによる補完（Firestoreが失敗した場合でも定期更新）
+  // ポーリングによる定期更新（3秒ごと）
   useEffect(() => {
     if (!groupId) return;
     const poll = async () => {
