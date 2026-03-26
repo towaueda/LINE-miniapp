@@ -130,6 +130,13 @@ export default function MatchingPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, userLoggedIn, userArea, isLiffMode, dbUser, checkStatus]);
 
+  // waiting / two_person_offered のとき定期的にステータスを再確認
+  useEffect(() => {
+    if (!isWaiting && !isTwoPersonOffered) return;
+    const interval = setInterval(checkStatus, 5000);
+    return () => clearInterval(interval);
+  }, [isWaiting, isTwoPersonOffered, checkStatus]);
+
   const toggleDate = (val: string) => {
     setSelectedDates((prev) =>
       prev.includes(val) ? prev.filter((d) => d !== val) : [...prev, val]
@@ -245,7 +252,7 @@ export default function MatchingPage() {
       ) : null}
 
       {matchResult ? (
-        <MatchResultView match={matchResult} userId={user!.id} onReset={() => {
+        <MatchResultView match={matchResult} userId={dbUser?.id || user!.id} onReset={() => {
           setMatchResult(null);
           localStorage.removeItem(MATCH_STORAGE_KEY);
           setIsWaiting(false);

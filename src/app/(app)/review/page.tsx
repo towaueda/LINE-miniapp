@@ -20,7 +20,8 @@ export default function ReviewPage() {
   const [inviteCode, setInviteCode] = useState("");
 
   const userLoggedIn = user?.isLoggedIn;
-  const userId = user?.id;
+  // dbUser.id はFirestoreのドキュメントID（matchメンバーのIDと一致する）
+  const userId = dbUser?.id || user?.id;
   const useApi = isLiffMode && !!dbUser;
 
   useEffect(() => {

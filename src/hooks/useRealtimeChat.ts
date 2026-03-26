@@ -76,26 +76,32 @@ export function useRealtimeChat(groupId: string | null) {
         limit(1)
       ) as Query<DocumentData>;
 
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-        snapshot.docChanges().forEach((change) => {
-          if (change.type === "added") {
-            const data = change.doc.data();
-            const newMsg = dbToChat({
-              id: change.doc.id,
-              group_id: data.group_id,
-              sender_id: data.sender_id,
-              sender_name: data.sender_name,
-              text: data.text,
-              is_system: data.is_system,
-              created_at: data.created_at,
-            });
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === newMsg.id)) return prev;
-              return [...prev, newMsg];
-            });
-          }
-        });
-      });
+      const unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          snapshot.docChanges().forEach((change) => {
+            if (change.type === "added") {
+              const data = change.doc.data();
+              const newMsg = dbToChat({
+                id: change.doc.id,
+                group_id: data.group_id,
+                sender_id: data.sender_id,
+                sender_name: data.sender_name,
+                text: data.text,
+                is_system: data.is_system,
+                created_at: data.created_at,
+              });
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === newMsg.id)) return prev;
+                return [...prev, newMsg];
+              });
+            }
+          });
+        },
+        (error) => {
+          console.error("Firestore chat subscription error:", error);
+        }
+      );
 
       unsubscribeRef.current = unsubscribe;
     });
@@ -106,6 +112,27 @@ export function useRealtimeChat(groupId: string | null) {
         unsubscribeRef.current = null;
       }
     };
+  }, [groupId]);
+
+  // ポーリングによる補完（Firestoreが失敗した場合でも定期更新）
+  useEffect(() => {
+    if (!groupId) return;
+    const poll = async () => {
+      try {
+        const data = await apiFetch<ChatResponse>(`/api/chat/${groupId}`);
+        const fetched = data.messages.map(dbToChat);
+        setMessages((prev) => {
+          const prevIds = new Set(prev.map((m) => m.id));
+          const newOnly = fetched.filter((m) => !prevIds.has(m.id));
+          if (newOnly.length === 0) return prev;
+          return [...prev, ...newOnly];
+        });
+      } catch {
+        // polling は silent fail
+      }
+    };
+    const interval = setInterval(poll, 3000);
+    return () => clearInterval(interval);
   }, [groupId]);
 
   // 過去のメッセージを読み込み（ページネーション）
@@ -132,10 +159,18 @@ export function useRealtimeChat(groupId: string | null) {
     async (text: string) => {
       if (!groupId || !text.trim()) return;
       try {
-        await apiFetch(`/api/chat/${groupId}/send`, {
+        const data = await apiFetch<{ message: DbMessagePayload }>(`/api/chat/${groupId}/send`, {
           method: "POST",
           body: JSON.stringify({ text: text.trim() }),
         });
+        // APIレスポンスで即時ローカル追加（Firestoreのリアルタイムより先に表示）
+        if (data.message) {
+          const newMsg = dbToChat(data.message);
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === newMsg.id)) return prev;
+            return [...prev, newMsg];
+          });
+        }
       } catch (e) {
         console.error("メッセージ送信失敗:", e);
       }
