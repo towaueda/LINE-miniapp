@@ -72,6 +72,8 @@ export default function AdminUsersPage() {
           <thead className="bg-gray-50">
             <tr>
               <th className="text-left px-6 py-4 font-medium text-gray-500">ユーザー</th>
+              <th className="text-left px-6 py-4 font-medium text-gray-500">会社名/屋号</th>
+              <th className="text-left px-6 py-4 font-medium text-gray-500">自己紹介</th>
               <th className="text-left px-6 py-4 font-medium text-gray-500">エリア</th>
               <th className="text-left px-6 py-4 font-medium text-gray-500">業種</th>
               <th className="text-left px-6 py-4 font-medium text-gray-500">登録日</th>
@@ -90,6 +92,10 @@ export default function AdminUsersPage() {
                       <p className="text-sm text-gray-400">{u.birth_year ? `${u.birth_year}年生` : ""}</p>
                     </div>
                   </div>
+                </td>
+                <td className="px-6 py-4 text-gray-600">{u.company || "-"}</td>
+                <td className="px-6 py-4 text-gray-600 max-w-xs">
+                  <p className="truncate" title={u.bio || ""}>{u.bio || "-"}</p>
                 </td>
                 <td className="px-6 py-4 text-gray-600">
                   {u.area ? AREA_LABELS[u.area as AreaOption] : "-"}
