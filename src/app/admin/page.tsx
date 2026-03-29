@@ -33,15 +33,15 @@ export default function AdminDashboard() {
   }, []);
 
   if (!stats) {
-    return <div className="text-gray-400">読み込み中...</div>;
+    return <div className="text-gray-400 text-base p-8">読み込み中...</div>;
   }
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">ダッシュボード</h1>
+      <h1 className="text-3xl font-bold mb-8">ダッシュボード</h1>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-4 gap-5 mb-10">
         <StatCard label="総ユーザー数" value={stats.totalUsers} />
         <StatCard label="BANユーザー" value={stats.bannedUsers} color="red" />
         <StatCard label="総マッチ数" value={stats.totalMatches} />
@@ -54,9 +54,9 @@ export default function AdminDashboard() {
 
       {/* Recent Activity */}
       <div className="grid grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl border border-gray-100 p-4">
-          <h3 className="font-semibold mb-3">最近のユーザー登録</h3>
-          <div className="space-y-2">
+        <div className="bg-white rounded-xl border border-gray-100 p-6">
+          <h3 className="font-semibold text-lg mb-4">最近のユーザー登録</h3>
+          <div className="space-y-3">
             {recentUsers.map((u) => (
               <div key={u.id} className="flex justify-between text-sm">
                 <span>{u.nickname || "未設定"}</span>
@@ -71,9 +71,9 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-100 p-4">
-          <h3 className="font-semibold mb-3">最近のマッチング</h3>
-          <div className="space-y-2">
+        <div className="bg-white rounded-xl border border-gray-100 p-6">
+          <h3 className="font-semibold text-lg mb-4">最近のマッチング</h3>
+          <div className="space-y-3">
             {recentMatches.map((m) => (
               <div key={m.id} className="flex justify-between text-sm">
                 <span>{AREA_LABELS[m.area as AreaOption] || m.area} - {m.date}</span>
@@ -100,9 +100,9 @@ export default function AdminDashboard() {
 function StatCard({ label, value, color, suffix }: { label: string; value: number; color?: string; suffix?: string }) {
   const textColor = color === "red" ? "text-red-500" : color === "green" ? "text-green-500" : "text-foreground";
   return (
-    <div className="bg-white rounded-xl border border-gray-100 p-4">
-      <p className="text-xs text-gray-500 mb-1">{label}</p>
-      <p className={`text-2xl font-bold ${textColor}`}>
+    <div className="bg-white rounded-xl border border-gray-100 p-6">
+      <p className="text-sm text-gray-500 mb-2">{label}</p>
+      <p className={`text-3xl font-bold ${textColor}`}>
         {value}{suffix}
       </p>
     </div>

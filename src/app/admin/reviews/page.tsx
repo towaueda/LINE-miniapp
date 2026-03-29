@@ -34,44 +34,44 @@ export default function AdminReviewsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">レビュー監視</h1>
-      <p className="text-sm text-gray-400 mb-4">{total}件</p>
+      <h1 className="text-3xl font-bold mb-8">レビュー監視</h1>
+      <p className="text-base text-gray-400 mb-6">{total}件</p>
 
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <table className="w-full text-sm">
+        <table className="w-full text-base">
           <thead className="bg-gray-50">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">レビューア</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">対象</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">話しやすさ</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">時間厳守</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">また会いたい</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">コメント</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">日付</th>
+              <th className="text-left px-6 py-4 font-medium text-gray-500">レビューア</th>
+              <th className="text-left px-6 py-4 font-medium text-gray-500">対象</th>
+              <th className="text-left px-6 py-4 font-medium text-gray-500">話しやすさ</th>
+              <th className="text-left px-6 py-4 font-medium text-gray-500">時間厳守</th>
+              <th className="text-left px-6 py-4 font-medium text-gray-500">また会いたい</th>
+              <th className="text-left px-6 py-4 font-medium text-gray-500">コメント</th>
+              <th className="text-left px-6 py-4 font-medium text-gray-500">日付</th>
             </tr>
           </thead>
           <tbody>
             {reviews.map((r) => (
-              <tr key={r.id} className="border-t border-gray-50">
-                <td className="px-4 py-3">
+              <tr key={r.id} className="border-t border-gray-100 hover:bg-gray-50 transition-colors">
+                <td className="px-6 py-4">
                   {r.reviewer?.avatar_emoji} {r.reviewer?.nickname || "?"}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-6 py-4">
                   {r.target?.avatar_emoji} {r.target?.nickname || "?"}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-6 py-4">
                   <Stars value={r.communication} />
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-6 py-4">
                   <Stars value={r.punctuality} />
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-6 py-4">
                   <Stars value={r.meet_again} />
                 </td>
-                <td className="px-4 py-3 text-gray-500 max-w-[200px] truncate">
+                <td className="px-6 py-4 text-gray-500 max-w-[280px] truncate">
                   {r.comment || "-"}
                 </td>
-                <td className="px-4 py-3 text-gray-400">
+                <td className="px-6 py-4 text-gray-400">
                   {new Date(r.created_at).toLocaleDateString("ja-JP")}
                 </td>
               </tr>
@@ -86,7 +86,7 @@ export default function AdminReviewsPage() {
             <button
               key={i}
               onClick={() => setPage(i + 1)}
-              className={`w-8 h-8 rounded-lg text-sm ${
+              className={`w-10 h-10 rounded-lg text-base ${
                 page === i + 1 ? "bg-orange text-white" : "bg-white text-gray-500 border border-gray-200"
               }`}
             >

@@ -43,80 +43,80 @@ export default function AdminUsersPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-6">ユーザー管理</h1>
+      <h1 className="text-3xl font-bold mb-8">ユーザー管理</h1>
 
       {/* Filters */}
-      <div className="flex gap-3 mb-4">
+      <div className="flex gap-4 mb-6">
         <input
           type="text"
           value={search}
           onChange={(e) => { setSearch(e.target.value); setPage(1); }}
           placeholder="ニックネーム / LINE ID で検索"
-          className="px-4 py-2 rounded-lg border border-gray-200 text-sm outline-none focus:border-orange flex-1 max-w-xs"
+          className="px-4 py-2.5 rounded-lg border border-gray-200 text-base outline-none focus:border-orange flex-1 max-w-sm"
         />
         <select
           value={filter}
           onChange={(e) => { setFilter(e.target.value); setPage(1); }}
-          className="px-3 py-2 rounded-lg border border-gray-200 text-sm outline-none"
+          className="px-4 py-2.5 rounded-lg border border-gray-200 text-base outline-none"
         >
           <option value="all">すべて</option>
           <option value="active">アクティブ</option>
           <option value="banned">BAN済み</option>
         </select>
-        <span className="text-sm text-gray-400 self-center">{total}件</span>
+        <span className="text-base text-gray-400 self-center">{total}件</span>
       </div>
 
       {/* Table */}
       <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
-        <table className="w-full text-sm">
+        <table className="w-full text-base">
           <thead className="bg-gray-50">
             <tr>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">ユーザー</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">エリア</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">業種</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">登録日</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">状態</th>
-              <th className="text-left px-4 py-3 font-medium text-gray-500">操作</th>
+              <th className="text-left px-6 py-4 font-medium text-gray-500">ユーザー</th>
+              <th className="text-left px-6 py-4 font-medium text-gray-500">エリア</th>
+              <th className="text-left px-6 py-4 font-medium text-gray-500">業種</th>
+              <th className="text-left px-6 py-4 font-medium text-gray-500">登録日</th>
+              <th className="text-left px-6 py-4 font-medium text-gray-500">状態</th>
+              <th className="text-left px-6 py-4 font-medium text-gray-500">操作</th>
             </tr>
           </thead>
           <tbody>
             {users.map((u) => (
-              <tr key={u.id} className="border-t border-gray-50">
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <span>{u.avatar_emoji || "👤"}</span>
+              <tr key={u.id} className="border-t border-gray-100 hover:bg-gray-50 transition-colors">
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-xl">{u.avatar_emoji || "👤"}</span>
                     <div>
                       <p className="font-medium">{u.nickname || "未設定"}</p>
-                      <p className="text-xs text-gray-400">{u.birth_year ? `${u.birth_year}年生` : ""}</p>
+                      <p className="text-sm text-gray-400">{u.birth_year ? `${u.birth_year}年生` : ""}</p>
                     </div>
                   </div>
                 </td>
-                <td className="px-4 py-3 text-gray-600">
+                <td className="px-6 py-4 text-gray-600">
                   {u.area ? AREA_LABELS[u.area as AreaOption] : "-"}
                 </td>
-                <td className="px-4 py-3 text-gray-600">{u.industry || "-"}</td>
-                <td className="px-4 py-3 text-gray-400">
+                <td className="px-6 py-4 text-gray-600">{u.industry || "-"}</td>
+                <td className="px-6 py-4 text-gray-400">
                   {new Date(u.created_at).toLocaleDateString("ja-JP")}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-6 py-4">
                   {u.is_banned ? (
-                    <span className="text-xs bg-red-50 text-red-500 px-2 py-1 rounded-full">BAN</span>
+                    <span className="text-sm bg-red-50 text-red-500 px-3 py-1 rounded-full">BAN</span>
                   ) : (
-                    <span className="text-xs bg-green-50 text-green-500 px-2 py-1 rounded-full">Active</span>
+                    <span className="text-sm bg-green-50 text-green-500 px-3 py-1 rounded-full">Active</span>
                   )}
                 </td>
-                <td className="px-4 py-3">
+                <td className="px-6 py-4">
                   {u.is_banned ? (
                     <button
                       onClick={() => handleUnban(u.id)}
-                      className="text-xs text-blue-500 hover:underline"
+                      className="text-sm text-blue-500 hover:underline"
                     >
                       解除
                     </button>
                   ) : (
                     <button
                       onClick={() => handleBan(u.id)}
-                      className="text-xs text-red-500 hover:underline"
+                      className="text-sm text-red-500 hover:underline"
                     >
                       BAN
                     </button>
@@ -135,7 +135,7 @@ export default function AdminUsersPage() {
             <button
               key={i}
               onClick={() => setPage(i + 1)}
-              className={`w-8 h-8 rounded-lg text-sm ${
+              className={`w-10 h-10 rounded-lg text-base ${
                 page === i + 1 ? "bg-orange text-white" : "bg-white text-gray-500 border border-gray-200"
               }`}
             >

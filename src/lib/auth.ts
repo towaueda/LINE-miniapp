@@ -77,7 +77,8 @@ export async function getOrCreateUser(lineUserId: string, displayName: string, i
 
   try {
     const docRef = await usersRef.add(newUser);
-    return { id: docRef.id, ...newUser } as DbUser;
+    const createdUser = { id: docRef.id, ...newUser } as DbUser;
+    return createdUser;
   } catch (e) {
     console.error("ユーザー作成失敗:", e);
     return null;
