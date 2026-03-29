@@ -177,7 +177,7 @@ export default function ProfilePage() {
         </Field>
 
         {/* Company */}
-        <Field label="会社名" required>
+        <Field label="会社名/屋号" required>
           <input
             type="text"
             value={company}

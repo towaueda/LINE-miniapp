@@ -2,10 +2,8 @@ import type { AreaOption } from "./index";
 
 export const AREA_LABELS: Record<AreaOption, string> = {
   umeda: "梅田",
-  yodoyabashi: "淀屋橋",
   honmachi: "本町",
-  namba: "難波",
-  tennoji: "天王寺",
+  namba: "難波/心斎橋",
 };
 
 export const INDUSTRY_OPTIONS = [

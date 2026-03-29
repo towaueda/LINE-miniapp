@@ -47,7 +47,7 @@ export interface Review {
   comment: string;
 }
 
-export type AreaOption = "umeda" | "yodoyabashi" | "honmachi" | "namba" | "tennoji";
+export type AreaOption = "umeda" | "honmachi" | "namba";
 
 // --- DB Types ---
 
