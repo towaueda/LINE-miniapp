@@ -1,7 +1,7 @@
 import type { AreaOption } from "@/types";
 import { INDUSTRY_OPTIONS } from "@/types/constants";
 
-const VALID_AREAS = new Set<AreaOption>(["umeda", "yodoyabashi", "honmachi", "namba", "tennoji"]);
+const VALID_AREAS = new Set<AreaOption>(["umeda", "yodoyabashi", "honmachi", "namba", "tennoji"] as AreaOption[]);
 const VALID_INDUSTRIES = new Set(INDUSTRY_OPTIONS.map((o) => o.value));
 
 // Firestore の自動生成ID（20文字の英数字）
