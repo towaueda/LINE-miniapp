@@ -67,10 +67,15 @@ export default function AdminMatchesPage() {
     setChatMatch(match);
     setMessages([]);
     setChatLoading(true);
-    const res = await fetch(`/api/admin/matches/${match.id}/messages`);
-    const data = await res.json();
-    setMessages(data.messages || []);
-    setChatLoading(false);
+    try {
+      const res = await fetch(`/api/admin/matches/${match.id}/messages`);
+      const data = await res.json();
+      setMessages(data.messages || []);
+    } catch {
+      setMessages([]);
+    } finally {
+      setChatLoading(false);
+    }
   };
 
   const closeChat = () => {

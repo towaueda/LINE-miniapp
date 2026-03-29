@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 const NAV_ITEMS = [
@@ -14,6 +15,15 @@ const NAV_ITEMS = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+
+  useEffect(() => {
+    document.body.style.maxWidth = "none";
+    document.body.style.margin = "0";
+    return () => {
+      document.body.style.maxWidth = "";
+      document.body.style.margin = "";
+    };
+  }, []);
 
   if (pathname === "/admin/login") {
     return <>{children}</>;

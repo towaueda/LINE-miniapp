@@ -17,11 +17,22 @@ export async function GET(
   const snap = await adminDb
     .collection("messages")
     .where("group_id", "==", groupId)
-    .orderBy("created_at", "asc")
+    .orderBy("created_at", "desc")
     .limit(limit)
     .get();
 
-  const messages = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  // 既存インデックス (group_id ASC, created_at DESC) を利用し、取得後に昇順へ反転
+  const messages = snap.docs
+    .map((d) => {
+      const data = d.data();
+      return {
+        id: d.id,
+        ...data,
+        // Firestore Timestamp → ISO文字列に変換
+        created_at: data.created_at?.toDate?.()?.toISOString() ?? data.created_at,
+      };
+    })
+    .reverse();
 
   return NextResponse.json({ messages });
 }
