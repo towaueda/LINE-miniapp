@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import type { DbUser, AreaOption } from "@/types";
-import { AREA_LABELS } from "@/types/constants";
+import { AREA_LABELS, INDUSTRY_LABEL_MAP } from "@/types/constants";
 
 export default function AdminUsersPage() {
   const [users, setUsers] = useState<DbUser[]>([]);
@@ -100,7 +100,7 @@ export default function AdminUsersPage() {
                 <td className="px-6 py-4 text-gray-600">
                   {u.area ? AREA_LABELS[u.area as AreaOption] : "-"}
                 </td>
-                <td className="px-6 py-4 text-gray-600">{u.industry || "-"}</td>
+                <td className="px-6 py-4 text-gray-600">{u.industry ? (INDUSTRY_LABEL_MAP.get(u.industry) ?? u.industry) : "-"}</td>
                 <td className="px-6 py-4 text-gray-400">
                   {new Date(u.created_at).toLocaleDateString("ja-JP")}
                 </td>
