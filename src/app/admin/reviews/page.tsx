@@ -37,7 +37,7 @@ export default function AdminReviewsPage() {
       <h1 className="text-3xl font-bold mb-8">レビュー監視</h1>
       <p className="text-base text-gray-400 mb-6">{total}件</p>
 
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
         <table className="w-full text-base">
           <thead className="bg-gray-50">
             <tr>

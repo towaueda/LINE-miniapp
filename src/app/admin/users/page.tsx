@@ -46,7 +46,7 @@ export default function AdminUsersPage() {
       <h1 className="text-3xl font-bold mb-8">ユーザー管理</h1>
 
       {/* Filters */}
-      <div className="flex gap-4 mb-6">
+      <div className="flex flex-wrap gap-3 mb-6">
         <input
           type="text"
           value={search}
@@ -67,7 +67,7 @@ export default function AdminUsersPage() {
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
         <table className="w-full text-base">
           <thead className="bg-gray-50">
             <tr>

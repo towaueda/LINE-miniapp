@@ -102,7 +102,7 @@ export default function AdminMatchesPage() {
         <span className="text-base text-gray-400 self-center">{total}件</span>
       </div>
 
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
         <table className="w-full text-base">
           <thead className="bg-gray-50">
             <tr>

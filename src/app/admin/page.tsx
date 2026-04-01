@@ -41,7 +41,7 @@ export default function AdminDashboard() {
       <h1 className="text-3xl font-bold mb-8">ダッシュボード</h1>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-4 gap-5 mb-10">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-5 mb-10">
         <StatCard label="総ユーザー数" value={stats.totalUsers} />
         <StatCard label="BANユーザー" value={stats.bannedUsers} color="red" />
         <StatCard label="総マッチ数" value={stats.totalMatches} />
@@ -53,7 +53,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Recent Activity */}
-      <div className="grid grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white rounded-xl border border-gray-100 p-6">
           <h3 className="font-semibold text-lg mb-4">最近のユーザー登録</h3>
           <div className="space-y-3">

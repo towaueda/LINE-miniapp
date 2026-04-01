@@ -89,7 +89,7 @@ export default function AdminInvitesPage() {
 
       {/* List */}
       <h3 className="font-semibold text-lg mb-4">招待コード一覧 ({total}件)</h3>
-      <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-xl border border-gray-100 overflow-x-auto">
         <table className="w-full text-base">
           <thead className="bg-gray-50">
             <tr>
