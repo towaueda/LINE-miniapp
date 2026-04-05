@@ -105,7 +105,7 @@ export default function Home() {
       {/* Hero */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 pt-8 pb-4">
         <div className="animate-fade-in text-center">
-          <div className="text-6xl mb-4">🔺</div>
+          <div className="mb-4"><img src="/icon.png" alt="Triangle" className="w-24 h-24 object-contain mx-auto" /></div>
           <h1 className="text-3xl font-bold mb-2">
             <span className="text-orange">Tri</span>
             <span className="text-foreground">angle</span>
@@ -114,6 +114,14 @@ export default function Home() {
             3人1組の、新しいランチ体験
           </p>
         </div>
+
+        {/* User Photos */}
+        <div className="flex justify-center gap-3 mb-6 animate-fade-in">
+          <img src="/user1.jpg" alt="ユーザー" className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-md" />
+          <img src="/user2.jpg" alt="ユーザー" className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-md" />
+          <img src="/user3.jpg" alt="ユーザー" className="w-16 h-16 rounded-full object-cover border-2 border-white shadow-md" />
+        </div>
+        <p className="text-xs text-gray-400 mb-6 text-center">すでに多くの人が参加中</p>
 
         {/* Features */}
         <div className="w-full max-w-sm space-y-3 animate-slide-up mb-8">

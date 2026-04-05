@@ -8,7 +8,7 @@ export default function Header() {
   return (
     <header className="sticky top-0 z-50 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
       <div className="flex items-center gap-2">
-        <span className="text-2xl">🔺</span>
+        <img src="/icon.png" alt="Triangle" className="w-8 h-8 object-contain" />
         <span className="font-bold text-lg tracking-tight">
           <span className="text-orange">Tri</span>
           <span className="text-foreground">angle</span>

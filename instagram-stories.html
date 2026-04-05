@@ -1,0 +1,1260 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Triangle — Instagram Stories</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@300;400;500;700;900&family=Noto+Serif+JP:wght@300;400;600;700&family=M+PLUS+Rounded+1c:wght@400;500;700;800&display=swap" rel="stylesheet">
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --peach:      #FF8C5A;
+  --peach-soft: #FFAB7B;
+  --peach-pale: #FFE5D5;
+  --cream:      #FFF8F2;
+  --warm-white: #FFFCF9;
+  --brown-soft: #7A4F3A;
+  --text-main:  #3D2B1F;
+  --text-sub:   #9B7060;
+  --green-line: #06C755;
+  --sage:       #7EAF8A;
+  --sage-pale:  #EAF4ED;
+  --sky:        #7BBFD4;
+  --sky-pale:   #E8F5F9;
+  --yellow-warm:#F5C843;
+}
+
+body {
+  background: #F5EDE6;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px 64px;
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+}
+
+.page-title {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  color: #B89A8A;
+  margin-bottom: 36px;
+  font-weight: 400;
+}
+
+.stories-wrapper {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.story-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+.story-label {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: #B89A8A;
+  font-weight: 400;
+}
+
+/* ── BASE ── */
+.story {
+  width: 390px;
+  height: 693px;
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  box-shadow:
+    0 24px 64px rgba(120, 60, 20, 0.16),
+    0 4px 12px rgba(120, 60, 20, 0.08);
+  flex-shrink: 0;
+}
+
+/* ════════════════════════════════════════════
+   PATTERN 1 — 3人一緒だから安心
+   背景：クリーム×ピーチの柔らか暖色
+════════════════════════════════════════════ */
+.s1 {
+  background: linear-gradient(170deg, #FFF6EE 0%, #FFE8D6 45%, #FFD4B4 100%);
+}
+
+/* 丸い装飾 */
+.s1-blob1 {
+  position: absolute;
+  width: 280px; height: 280px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,171,123,0.35) 0%, transparent 70%);
+  top: -60px; right: -80px;
+  pointer-events: none;
+}
+.s1-blob2 {
+  position: absolute;
+  width: 200px; height: 200px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,140,90,0.2) 0%, transparent 70%);
+  bottom: 80px; left: -60px;
+  pointer-events: none;
+}
+
+/* TOP ── アプリ名バッジ */
+.s1-topbar {
+  position: absolute;
+  top: 36px; left: 0; right: 0;
+  display: flex;
+  justify-content: center;
+}
+.s1-badge {
+  background: rgba(255,255,255,0.72);
+  backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(255,255,255,0.9);
+  border-radius: 100px;
+  padding: 8px 20px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  box-shadow: 0 2px 12px rgba(200,100,50,0.1);
+}
+.s1-badge-icon { font-size: 15px; line-height: 1; }
+.s1-badge-text {
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--brown-soft);
+  letter-spacing: 0.06em;
+}
+
+/* CENTER ── 3人のアバター (三角配置) */
+.s1-scene {
+  position: absolute;
+  top: 100px;
+  left: 50%; transform: translateX(-50%);
+  width: 310px; height: 300px;
+}
+
+/* SVG背景ライン */
+.s1-lines {
+  position: absolute;
+  inset: 0;
+}
+
+/* アバターカード */
+.av-card {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.av-bubble {
+  width: 84px; height: 84px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 34px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.10);
+  border: 3px solid rgba(255,255,255,0.9);
+}
+.av-tag {
+  background: rgba(255,255,255,0.82);
+  backdrop-filter: blur(8px);
+  border-radius: 100px;
+  padding: 4px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--brown-soft);
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+/* 上 */
+.av-top { top: 0; left: 50%; transform: translateX(-50%); animation: bobA 3.2s ease-in-out infinite; }
+/* 左下 */
+.av-bl  { bottom: 0; left: 10px; animation: bobB 3.8s ease-in-out infinite; }
+/* 右下 */
+.av-br  { bottom: 0; right: 10px; animation: bobC 4.4s ease-in-out infinite; }
+
+@keyframes bobA { 0%,100%{transform:translateX(-50%) translateY(0)} 50%{transform:translateX(-50%) translateY(-9px)} }
+@keyframes bobB { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
+@keyframes bobC { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-11px)} }
+
+/* 真ん中のハート */
+.s1-heart {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%);
+  background: #fff;
+  border-radius: 50%;
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  box-shadow: 0 4px 14px rgba(200,80,30,0.15);
+  animation: heartbeat 2s ease-in-out infinite;
+}
+@keyframes heartbeat {
+  0%,100%{transform:translate(-50%,-50%) scale(1);}
+  40%{transform:translate(-50%,-50%) scale(1.12);}
+  60%{transform:translate(-50%,-50%) scale(0.97);}
+}
+
+/* COPY */
+.s1-copy {
+  position: absolute;
+  bottom: 168px;
+  left: 0; right: 0;
+  padding: 0 36px;
+  text-align: center;
+}
+.s1-main {
+  font-family: 'Noto Serif JP', serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.65;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+}
+.s1-main em {
+  font-style: normal;
+  color: var(--peach);
+}
+.s1-sub {
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-sub);
+  letter-spacing: 0.14em;
+}
+
+/* BOTTOM ── 特徴ピル + ロゴ */
+.s1-bottom {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 148px;
+  background: rgba(255,255,255,0.6);
+  backdrop-filter: blur(24px);
+  border-top: 1.5px solid rgba(255,255,255,0.85);
+  border-radius: 0 0 28px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 28px;
+}
+.s1-pills {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.s1-pill {
+  background: var(--peach-pale);
+  border-radius: 100px;
+  padding: 5px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--peach);
+  letter-spacing: 0.08em;
+  border: 1.5px solid rgba(255,140,90,0.25);
+}
+.s1-pill.green {
+  background: var(--sage-pale);
+  color: var(--sage);
+  border-color: rgba(126,175,138,0.3);
+}
+.s1-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.s1-logo-tri { font-size: 20px; line-height: 1; }
+.s1-logo-name {
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: 0.06em;
+}
+.s1-logo-name span {
+  color: var(--peach);
+}
+
+/* ════════════════════════════════════════════
+   PATTERN 2 — 気軽に参加できる理由
+   背景：明るいミントホワイト
+════════════════════════════════════════════ */
+.s2 {
+  background: linear-gradient(155deg, #FDFFF9 0%, #EDF7F0 50%, #E2F4E9 100%);
+}
+
+.s2-blob1 {
+  position: absolute;
+  width: 320px; height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(126,175,138,0.2) 0%, transparent 65%);
+  top: -40px; left: -80px;
+  pointer-events: none;
+}
+.s2-blob2 {
+  position: absolute;
+  width: 220px; height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,140,90,0.15) 0%, transparent 65%);
+  bottom: 60px; right: -50px;
+  pointer-events: none;
+}
+
+/* TOP */
+.s2-topbar {
+  position: absolute;
+  top: 36px; left: 28px; right: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.s2-logo-sm {
+  display: flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.75);
+  backdrop-filter: blur(12px);
+  border-radius: 100px;
+  padding: 7px 16px;
+  border: 1.5px solid rgba(255,255,255,0.9);
+}
+.s2-logo-sm-text {
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: 0.04em;
+}
+.s2-line-badge {
+  background: var(--green-line);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.08em;
+}
+
+/* HERO NUMBER */
+.s2-hero-num {
+  position: absolute;
+  top: 108px;
+  left: 0; right: 0;
+  text-align: center;
+}
+.s2-num {
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 120px;
+  font-weight: 800;
+  color: rgba(126,175,138,0.15);
+  line-height: 1;
+  letter-spacing: -0.04em;
+  user-select: none;
+}
+
+/* 3カード (理由リスト) */
+.s2-reasons {
+  position: absolute;
+  top: 158px;
+  left: 0; right: 0;
+  padding: 0 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.s2-reason {
+  background: rgba(255,255,255,0.75);
+  backdrop-filter: blur(16px);
+  border-radius: 20px;
+  padding: 18px 22px;
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  border: 1.5px solid rgba(255,255,255,0.95);
+  box-shadow: 0 4px 16px rgba(80,140,90,0.07);
+}
+.s2-reason-icon {
+  font-size: 30px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.s2-reason-body { display: flex; flex-direction: column; }
+.s2-reason-title {
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: 0.04em;
+  margin-bottom: 4px;
+}
+.s2-reason-desc {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-sub);
+  letter-spacing: 0.06em;
+  line-height: 1.6;
+}
+
+/* COPY */
+.s2-copy {
+  position: absolute;
+  bottom: 148px;
+  left: 0; right: 0;
+  padding: 0 36px;
+  text-align: center;
+}
+.s2-main {
+  font-family: 'Noto Serif JP', serif;
+  font-size: 23px;
+  font-weight: 600;
+  color: var(--text-main);
+  line-height: 1.7;
+  letter-spacing: 0.06em;
+}
+.s2-main em {
+  font-style: normal;
+  color: var(--sage);
+}
+
+/* BOTTOM */
+.s2-bottom {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 128px;
+  background: rgba(255,255,255,0.65);
+  backdrop-filter: blur(24px);
+  border-top: 1.5px solid rgba(255,255,255,0.9);
+  border-radius: 0 0 28px 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 0 32px;
+  flex-direction: column;
+}
+.s2-cta {
+  background: linear-gradient(135deg, var(--peach) 0%, #FF7043 100%);
+  border-radius: 16px;
+  padding: 12px 32px;
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.08em;
+  box-shadow: 0 6px 20px rgba(255,112,67,0.35);
+}
+.s2-cta-note {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-sub);
+  letter-spacing: 0.15em;
+  font-family: 'Noto Sans JP', sans-serif;
+}
+
+/* ════════════════════════════════════════════
+   PATTERN 3 — ランチの時間、もっと豊かに
+   背景：温かみのある白 × スカイブルー
+════════════════════════════════════════════ */
+.s3 {
+  background: linear-gradient(155deg, #FEFCFA 0%, #FFF3EA 40%, #FEF0F9 100%);
+}
+
+.s3-blob1 {
+  position: absolute;
+  width: 300px; height: 300px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,200,160,0.28) 0%, transparent 65%);
+  top: 30px; right: -80px;
+  pointer-events: none;
+}
+.s3-blob2 {
+  position: absolute;
+  width: 250px; height: 250px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(200,160,220,0.18) 0%, transparent 65%);
+  bottom: 100px; left: -70px;
+  pointer-events: none;
+}
+
+/* Soft confetti dots */
+.s3-dot {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: drift 6s ease-in-out infinite;
+}
+@keyframes drift {
+  0%,100%{transform:translateY(0) rotate(0deg);}
+  50%{transform:translateY(-14px) rotate(15deg);}
+}
+
+/* TOP */
+.s3-topbar {
+  position: absolute;
+  top: 36px; left: 0; right: 0;
+  display: flex;
+  justify-content: center;
+}
+.s3-top-badge {
+  background: rgba(255,255,255,0.8);
+  backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(255,255,255,0.95);
+  border-radius: 100px;
+  padding: 8px 20px;
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-sub);
+  letter-spacing: 0.14em;
+  box-shadow: 0 2px 10px rgba(180,100,60,0.08);
+}
+.s3-top-badge span { color: var(--peach); }
+
+/* HERO illustration area */
+.s3-illust {
+  position: absolute;
+  top: 108px;
+  left: 50%; transform: translateX(-50%);
+  width: 320px; height: 260px;
+}
+
+/* ランチテーブルイラスト（SVG） */
+.s3-table-svg {
+  width: 100%; height: 100%;
+}
+
+/* COPY */
+.s3-copy {
+  position: absolute;
+  bottom: 180px;
+  left: 0; right: 0;
+  padding: 0 36px;
+  text-align: center;
+}
+.s3-eyebrow {
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--peach-soft);
+  letter-spacing: 0.28em;
+  margin-bottom: 14px;
+}
+.s3-main {
+  font-family: 'Noto Serif JP', serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.7;
+  letter-spacing: 0.05em;
+  margin-bottom: 14px;
+}
+.s3-main em {
+  font-style: normal;
+  color: var(--peach);
+}
+.s3-sub {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-sub);
+  letter-spacing: 0.12em;
+  line-height: 1.9;
+}
+
+/* BOTTOM */
+.s3-bottom {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 158px;
+  background: rgba(255,255,255,0.65);
+  backdrop-filter: blur(24px);
+  border-top: 1.5px solid rgba(255,255,255,0.9);
+  border-radius: 0 0 28px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 32px;
+}
+.s3-bottom-logo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.s3-bottom-logo-text {
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: 0.05em;
+}
+.s3-bottom-logo-text span { color: var(--peach); }
+
+.s3-area-pills {
+  display: flex;
+  gap: 8px;
+}
+.s3-area-pill {
+  background: var(--peach-pale);
+  border-radius: 100px;
+  padding: 5px 14px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--peach);
+  letter-spacing: 0.06em;
+  border: 1.5px solid rgba(255,140,90,0.2);
+}
+.s3-invite-note {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-sub);
+  letter-spacing: 0.14em;
+}
+
+/* ════════════════════════════════════════════
+   PATTERN 4 — リアル人物写真 × 広告CTAリデザイン
+════════════════════════════════════════════ */
+.s4 {
+  background: linear-gradient(168deg, #FFF9F5 0%, #FFEEDD 50%, #FFE0C8 100%);
+}
+
+.s4-blob1 {
+  position: absolute;
+  width: 320px; height: 320px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,200,160,0.28) 0%, transparent 65%);
+  top: -40px; right: -90px;
+  pointer-events: none;
+}
+.s4-blob2 {
+  position: absolute;
+  width: 220px; height: 220px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,171,123,0.18) 0%, transparent 65%);
+  bottom: 160px; left: -70px;
+  pointer-events: none;
+}
+
+/* TOP バー */
+.s4-topbar {
+  position: absolute;
+  top: 36px; left: 24px; right: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 2;
+}
+.s4-badge {
+  background: rgba(255,255,255,0.78);
+  backdrop-filter: blur(14px);
+  border: 1.5px solid rgba(255,255,255,0.95);
+  border-radius: 100px;
+  padding: 10px 22px;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  box-shadow: 0 2px 10px rgba(200,100,50,0.08);
+}
+.s4-badge-text {
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--brown-soft);
+  letter-spacing: 0.05em;
+}
+.s4-line-badge {
+  background: var(--green-line);
+  border-radius: 10px;
+  padding: 9px 16px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.08em;
+}
+
+/* ── 人物フォーメーション ── */
+.s4-people {
+  position: absolute;
+  top: 96px;
+  left: 50%; transform: translateX(-50%);
+  width: 320px; height: 290px;
+}
+
+/* SVG繋がりライン */
+.s4-lines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* 中央のTriangleアイコン */
+.s4-center-icon {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 4px 16px rgba(255,100,50,0.18);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  animation: heartbeat 2.2s ease-in-out infinite;
+}
+
+/* 各人物カード */
+.s4-person {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+
+/* 写真円 */
+.s4-photo-wrap {
+  position: relative;
+  width: 90px; height: 90px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3.5px solid #fff;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.14);
+}
+.s4-photo-wrap img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* オンラインドット */
+.s4-online {
+  position: absolute;
+  bottom: 4px; right: 4px;
+  width: 14px; height: 14px;
+  background: #4CAF50;
+  border-radius: 50%;
+  border: 2.5px solid #fff;
+}
+
+/* ネームタグ */
+.s4-nametag {
+  background: rgba(255,255,255,0.88);
+  backdrop-filter: blur(8px);
+  border-radius: 100px;
+  padding: 4px 13px;
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--brown-soft);
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.07);
+}
+.s4-nametag span {
+  color: var(--peach);
+  font-size: 9px;
+  margin-left: 4px;
+}
+
+/* 配置 */
+.s4-p-top { top: 0; left: 50%; transform: translateX(-50%); animation: bobA 3.2s ease-in-out infinite; }
+.s4-p-bl  { bottom: 0; left: 8px;  animation: bobB 3.8s ease-in-out infinite; }
+.s4-p-br  { bottom: 0; right: 8px; animation: bobC 4.4s ease-in-out infinite; }
+
+/* ── コピー ── */
+.s4-copy {
+  position: absolute;
+  bottom: 182px;
+  left: 0; right: 0;
+  padding: 0 32px;
+  text-align: center;
+}
+.s4-eyebrow {
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--peach-soft);
+  letter-spacing: 0.3em;
+  margin-bottom: 10px;
+}
+.s4-main {
+  font-family: 'Noto Serif JP', serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1.68;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
+.s4-main em {
+  font-style: normal;
+  color: var(--peach);
+}
+.s4-sub {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-sub);
+  letter-spacing: 0.1em;
+  line-height: 1.85;
+}
+
+/* ── ボトムCTA ── */
+.s4-bottom {
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 162px;
+  background: rgba(255,255,255,0.65);
+  backdrop-filter: blur(24px);
+  border-top: 1.5px solid rgba(255,255,255,0.92);
+  border-radius: 0 0 28px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 24px;
+}
+
+/* CTAボタン：左テキスト + 右矢印 */
+.s4-cta {
+  width: 100%;
+  background: linear-gradient(135deg, #FF8C5A 0%, #FF4F1F 100%);
+  border-radius: 18px;
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  box-shadow: 0 8px 24px rgba(255,90,40,0.32);
+}
+.s4-cta-left { display: flex; flex-direction: column; }
+.s4-cta-main {
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: 0.06em;
+  display: block;
+  margin-bottom: 2px;
+}
+.s4-cta-sub {
+  font-family: 'Noto Sans JP', sans-serif;
+  font-size: 10px;
+  font-weight: 400;
+  color: rgba(255,255,255,0.82);
+  letter-spacing: 0.1em;
+  display: block;
+}
+.s4-cta-arrow {
+  width: 34px; height: 34px;
+  background: rgba(255,255,255,0.22);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 15px;
+  flex-shrink: 0;
+  color: #fff;
+  font-weight: 700;
+}
+
+/* ブランド行 */
+.s4-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+.s4-logo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.s4-logo-name {
+  font-family: 'M PLUS Rounded 1c', sans-serif;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-main);
+  letter-spacing: 0.04em;
+}
+.s4-logo-name span { color: var(--peach); }
+.s4-area-pills {
+  display: flex;
+  gap: 5px;
+}
+.s4-area-pill {
+  background: var(--peach-pale);
+  border-radius: 100px;
+  padding: 4px 10px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--peach);
+  letter-spacing: 0.05em;
+  border: 1.5px solid rgba(255,140,90,0.2);
+}
+
+</style>
+</head>
+<body>
+
+<p class="page-title">Triangle — Instagram Story Ads / 安心感リデザイン</p>
+
+<div class="stories-wrapper">
+
+  <!-- ══════════════════════════════════════
+       PATTERN 1 ─ 3人一緒だから安心
+  ══════════════════════════════════════ -->
+  <div class="story-container">
+    <div class="story s1">
+      <div class="s1-blob1"></div>
+      <div class="s1-blob2"></div>
+
+      <!-- TOP バッジ -->
+      <div class="s1-topbar">
+        <div class="s1-badge">
+          <span class="s1-badge-icon"><img src="src/app/icon.png" style="width:18px;height:18px;object-fit:contain;vertical-align:middle;"></span>
+          <span class="s1-badge-text">Triangle</span>
+        </div>
+      </div>
+
+      <!-- 3人シーン -->
+      <div class="s1-scene">
+        <!-- 繋がりライン (SVG) -->
+        <svg class="s1-lines" viewBox="0 0 310 300" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <line x1="155" y1="82" x2="52" y2="252" stroke="rgba(255,140,90,0.3)" stroke-width="2" stroke-dasharray="7 5" stroke-linecap="round"/>
+          <line x1="155" y1="82" x2="258" y2="252" stroke="rgba(255,140,90,0.3)" stroke-width="2" stroke-dasharray="7 5" stroke-linecap="round"/>
+          <line x1="52" y1="252" x2="258" y2="252" stroke="rgba(255,140,90,0.3)" stroke-width="2" stroke-dasharray="7 5" stroke-linecap="round"/>
+        </svg>
+
+        <!-- 真ん中ハート -->
+        <div class="s1-heart">🧡</div>
+
+        <!-- 上 -->
+        <div class="av-card av-top">
+          <div class="av-bubble" style="background:linear-gradient(135deg,#FFE0CC,#FFD4B4);">🧑</div>
+          <div class="av-tag">Kさん · IT</div>
+        </div>
+        <!-- 左下 -->
+        <div class="av-card av-bl">
+          <div class="av-bubble" style="background:linear-gradient(135deg,#D4EDDA,#C2E5CA);">👩</div>
+          <div class="av-tag">Sさん · 広告</div>
+        </div>
+        <!-- 右下 -->
+        <div class="av-card av-br">
+          <div class="av-bubble" style="background:linear-gradient(135deg,#D4E8F5,#BDD9ED);">🧑‍💼</div>
+          <div class="av-tag">Mさん · 金融</div>
+        </div>
+      </div>
+
+      <!-- COPY -->
+      <div class="s1-copy">
+        <p class="s1-main"><em>3人</em>だから、<br>気軽に話せる。<br>安心して会える。</p>
+        <p class="s1-sub">1対1じゃないから、はじめてでも怖くない</p>
+      </div>
+
+      <!-- BOTTOM -->
+      <div class="s1-bottom">
+        <div class="s1-pills">
+          <div class="s1-pill">3人1組</div>
+          <div class="s1-pill green">審査制で安心</div>
+          <div class="s1-pill">招待制</div>
+        </div>
+        <div class="s1-logo">
+          <span class="s1-logo-tri"><img src="src/app/icon.png" style="width:22px;height:22px;object-fit:contain;vertical-align:middle;"></span>
+          <span class="s1-logo-name"><span>Tri</span>angle</span>
+        </div>
+      </div>
+    </div>
+    <span class="story-label">Pattern 1 — 3人だから安心</span>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       PATTERN 2 ─ 気軽に参加できる3つの理由
+  ══════════════════════════════════════ -->
+  <div class="story-container">
+    <div class="story s2">
+      <div class="s2-blob1"></div>
+      <div class="s2-blob2"></div>
+
+      <!-- 大きな背景ナンバー -->
+      <div class="s2-hero-num">
+        <span class="s2-num">3</span>
+      </div>
+
+      <!-- TOP -->
+      <div class="s2-topbar">
+        <div class="s2-logo-sm">
+          <span><img src="src/app/icon.png" style="width:16px;height:16px;object-fit:contain;vertical-align:middle;"></span>
+          <span class="s2-logo-sm-text">Triangle</span>
+        </div>
+        <div class="s2-line-badge">LINE Mini App</div>
+      </div>
+
+      <!-- 理由カード3枚 -->
+      <div class="s2-reasons">
+        <div class="s2-reason">
+          <span class="s2-reason-icon">👥</span>
+          <div class="s2-reason-body">
+            <p class="s2-reason-title">3人1組だから気軽</p>
+            <p class="s2-reason-desc">1対1のプレッシャーなし。<br>3人でわいわい話せる</p>
+          </div>
+        </div>
+        <div class="s2-reason">
+          <span class="s2-reason-icon">✅</span>
+          <div class="s2-reason-body">
+            <p class="s2-reason-title">招待制・審査制で安全</p>
+            <p class="s2-reason-desc">信頼できる人しか参加できない<br>クローズドなコミュニティ</p>
+          </div>
+        </div>
+        <div class="s2-reason">
+          <span class="s2-reason-icon">🍽️</span>
+          <div class="s2-reason-body">
+            <p class="s2-reason-title">ランチ限定・1時間だけ</p>
+            <p class="s2-reason-desc">お昼休みに気軽に参加。<br>時間を取りすぎない</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- COPY -->
+      <div class="s2-copy">
+        <p class="s2-main">だから、<em>はじめての人</em>でも<br>安心して参加できる。</p>
+      </div>
+
+      <!-- BOTTOM -->
+      <div class="s2-bottom">
+        <div class="s2-cta">友達から招待をもらって参加</div>
+        <p class="s2-cta-note">梅田・本町・難波 で展開中</p>
+      </div>
+    </div>
+    <span class="story-label">Pattern 2 — 安心の理由</span>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       PATTERN 3 ─ ランチの時間をもっと豊かに
+  ══════════════════════════════════════ -->
+  <div class="story-container">
+    <div class="story s3">
+      <div class="s3-blob1"></div>
+      <div class="s3-blob2"></div>
+
+      <!-- ふわふわドット装飾 -->
+      <div class="s3-dot" style="width:16px;height:16px;background:rgba(255,171,123,0.4);top:130px;left:38px;animation-delay:0s;"></div>
+      <div class="s3-dot" style="width:10px;height:10px;background:rgba(255,140,90,0.3);top:280px;right:44px;animation-delay:1.2s;"></div>
+      <div class="s3-dot" style="width:12px;height:12px;background:rgba(200,160,220,0.4);top:200px;right:28px;animation-delay:2.1s;"></div>
+      <div class="s3-dot" style="width:8px;height:8px;background:rgba(126,175,138,0.4);top:380px;left:46px;animation-delay:0.7s;"></div>
+      <div class="s3-dot" style="width:14px;height:14px;background:rgba(245,200,67,0.35);top:460px;right:56px;animation-delay:1.8s;border-radius:4px;transform:rotate(20deg);"></div>
+
+      <!-- TOP バッジ -->
+      <div class="s3-topbar">
+        <div class="s3-top-badge">✨ <span>ランチ</span>が、出会いの場になる</div>
+      </div>
+
+      <!-- ランチイラスト (SVG) -->
+      <div class="s3-illust">
+        <svg class="s3-table-svg" viewBox="0 0 320 260" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- テーブル -->
+          <ellipse cx="160" cy="175" rx="130" ry="50" fill="#F5E6D8" opacity="0.7"/>
+          <ellipse cx="160" cy="168" rx="128" ry="48" fill="#EDD5BE" opacity="0.9"/>
+          <!-- テーブル上の料理 -->
+          <!-- プレート1 -->
+          <ellipse cx="110" cy="158" rx="30" ry="12" fill="white" opacity="0.9"/>
+          <ellipse cx="110" cy="155" rx="22" ry="9" fill="#FFDAB5" opacity="0.8"/>
+          <circle cx="104" cy="154" r="5" fill="#FF8C5A" opacity="0.7"/>
+          <circle cx="114" cy="153" r="4" fill="#FFB347" opacity="0.7"/>
+          <circle cx="110" cy="160" r="3" fill="#98D8A3" opacity="0.7"/>
+          <!-- プレート2 -->
+          <ellipse cx="210" cy="158" rx="30" ry="12" fill="white" opacity="0.9"/>
+          <ellipse cx="210" cy="155" rx="22" ry="9" fill="#C8E6C9" opacity="0.8"/>
+          <circle cx="206" cy="153" r="5" fill="#66BB6A" opacity="0.7"/>
+          <circle cx="216" cy="155" r="4" fill="#A5D6A7" opacity="0.7"/>
+          <!-- コーヒーカップ -->
+          <ellipse cx="160" cy="153" rx="16" ry="8" fill="white" opacity="0.95"/>
+          <ellipse cx="160" cy="151" rx="12" ry="6" fill="#D4956A" opacity="0.6"/>
+          <path d="M 176 150 Q 182 148 181 154 Q 180 158 176 157" stroke="#D4956A" stroke-width="2" fill="none" stroke-linecap="round" opacity="0.7"/>
+          <!-- 湯気 -->
+          <path d="M 156 140 Q 154 135 157 130 Q 160 125 158 120" stroke="#FFAB7B" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.5"/>
+          <path d="M 162 138 Q 164 133 161 128 Q 158 123 161 118" stroke="#FFAB7B" stroke-width="1.5" fill="none" stroke-linecap="round" opacity="0.4"/>
+
+          <!-- 人物 3人 (シルエット) -->
+          <!-- 左の人 -->
+          <circle cx="58" cy="125" r="26" fill="#FFE0CC"/>
+          <text x="58" y="133" text-anchor="middle" font-size="22" fill="#fff">🧑</text>
+          <!-- 上の人 -->
+          <circle cx="160" cy="78" r="26" fill="#D4EDDA"/>
+          <text x="160" y="86" text-anchor="middle" font-size="22" fill="#fff">👩</text>
+          <!-- 右の人 -->
+          <circle cx="262" cy="125" r="26" fill="#D4E8F5"/>
+          <text x="262" y="133" text-anchor="middle" font-size="22" fill="#fff">🧑‍💼</text>
+
+          <!-- 吹き出し -->
+          <rect x="70" y="90" width="60" height="26" rx="13" fill="white" opacity="0.9"/>
+          <polygon points="76,116 84,116 78,124" fill="white" opacity="0.9"/>
+          <text x="100" y="108" text-anchor="middle" font-family="'M PLUS Rounded 1c'" font-size="10" fill="#7A4F3A" font-weight="700">楽しい！</text>
+
+          <rect x="190" y="90" width="60" height="26" rx="13" fill="white" opacity="0.9"/>
+          <polygon points="236,116 244,116 238,124" fill="white" opacity="0.9"/>
+          <text x="220" y="108" text-anchor="middle" font-family="'M PLUS Rounded 1c'" font-size="10" fill="#7A4F3A" font-weight="700">また来よ</text>
+        </svg>
+      </div>
+
+      <!-- COPY -->
+      <div class="s3-copy">
+        <p class="s3-eyebrow">OSAKA LUNCH MATCHING</p>
+        <p class="s3-main">お昼の<em>1時間</em>で、<br>新しい仲間と<br>出会えるアプリ。</p>
+        <p class="s3-sub">大阪3エリアで、毎日マッチング中<br>24〜30歳 · 各業種の社会人が参加</p>
+      </div>
+
+      <!-- BOTTOM -->
+      <div class="s3-bottom">
+        <div class="s3-bottom-logo">
+          <span><img src="src/app/icon.png" style="width:24px;height:24px;object-fit:contain;vertical-align:middle;"></span>
+          <span class="s3-bottom-logo-text"><span>Tri</span>angle</span>
+        </div>
+        <div class="s3-area-pills">
+          <div class="s3-area-pill">梅田</div>
+          <div class="s3-area-pill">本町</div>
+          <div class="s3-area-pill">難波</div>
+        </div>
+        <p class="s3-invite-note">招待コードはお友達からもらえます</p>
+      </div>
+    </div>
+    <span class="story-label">Pattern 3 — ランチで出会い</span>
+  </div>
+
+  <!-- ══════════════════════════════════════
+       PATTERN 4 ─ リアル人物写真 × 広告CTA
+  ══════════════════════════════════════ -->
+  <div class="story-container">
+    <div class="story s4" id="pattern4">
+      <div class="s4-blob1"></div>
+      <div class="s4-blob2"></div>
+
+      <!-- TOP -->
+      <div class="s4-topbar">
+        <div class="s4-badge">
+          <span style="line-height:1;"><img src="src/app/icon.png" style="width:34px;height:34px;object-fit:contain;vertical-align:middle;"></span>
+          <span class="s4-badge-text">Triangle</span>
+        </div>
+        <div class="s4-line-badge">LINEミニアプリ</div>
+      </div>
+
+      <!-- 人物フォーメーション（三角配置） -->
+      <div class="s4-people">
+
+        <!-- 繋がりライン -->
+        <svg class="s4-lines" viewBox="0 0 320 290" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <line x1="160" y1="88" x2="52" y2="248" stroke="rgba(255,140,90,0.28)" stroke-width="2" stroke-dasharray="7 5" stroke-linecap="round"/>
+          <line x1="160" y1="88" x2="268" y2="248" stroke="rgba(255,140,90,0.28)" stroke-width="2" stroke-dasharray="7 5" stroke-linecap="round"/>
+          <line x1="52" y1="248" x2="268" y2="248" stroke="rgba(255,140,90,0.28)" stroke-width="2" stroke-dasharray="7 5" stroke-linecap="round"/>
+        </svg>
+
+        <!-- 中央アイコン -->
+        <div class="s4-center-icon">🧡</div>
+
+        <!-- 上：Sさん・広告 (26歳 女性) -->
+        <div class="s4-person s4-p-top">
+          <div class="s4-photo-wrap">
+            <img src="34219380_s (1).jpg" alt="Sさん" style="width:100%;height:100%;object-fit:cover;display:block;"/>
+            <div class="s4-online"></div>
+          </div>
+          <div class="s4-nametag">Sさん<span>広告・26歳</span></div>
+        </div>
+
+        <!-- 左下：Kさん・IT (28歳 男性) -->
+        <div class="s4-person s4-p-bl">
+          <div class="s4-photo-wrap">
+            <img src="34150159_s (1).jpg" alt="Kさん" style="width:100%;height:100%;object-fit:cover;display:block;"/>
+            <div class="s4-online"></div>
+          </div>
+          <div class="s4-nametag">Kさん<span>IT・28歳</span></div>
+        </div>
+
+        <!-- 右下：Mさん・コンサル (25歳 女性) -->
+        <div class="s4-person s4-p-br">
+          <div class="s4-photo-wrap">
+            <img src="34387274_s (1).jpg" alt="Mさん" style="width:100%;height:100%;object-fit:cover;display:block;"/>
+            <div class="s4-online"></div>
+          </div>
+          <div class="s4-nametag">Mさん<span>コンサル・25歳</span></div>
+        </div>
+
+      </div>
+
+      <!-- COPY -->
+      <div class="s4-copy">
+        <p class="s4-eyebrow">3人1組 · 招待制</p>
+        <p class="s4-main"><em>1対1</em>じゃないから、<br>気軽に話せる。</p>
+        <p class="s4-sub">知らない人と会うのが怖くない。<br>梅田・本町・難波で毎週マッチング中</p>
+      </div>
+
+      <!-- BOTTOM CTA -->
+      <div class="s4-bottom">
+        <div class="s4-cta">
+          <div class="s4-cta-left">
+            <span class="s4-cta-main">招待コードを申し込む</span>
+            <span class="s4-cta-sub">完全無料</span>
+          </div>
+          <div class="s4-cta-arrow">→</div>
+        </div>
+        <div class="s4-meta">
+          <div class="s4-area-pills">
+            <div class="s4-area-pill">梅田</div>
+            <div class="s4-area-pill">本町</div>
+            <div class="s4-area-pill">難波/心斎橋</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <span class="story-label">Pattern 4 — イラスト × CTA</span>
+    <button onclick="downloadPattern4()" style="margin-top:8px;display:block;width:100%;padding:8px 0;background:#06C755;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Noto Sans JP',sans-serif;">⬇ 画像をダウンロード</button>
+  </div>
+
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script>
+async function downloadPattern4() {
+  const btn = event.currentTarget;
+  btn.textContent = '生成中...';
+  btn.disabled = true;
+  try {
+    const el = document.getElementById('pattern4');
+    const canvas = await html2canvas(el, {
+      scale: 3,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: null,
+      width: el.offsetWidth,
+      height: el.offsetHeight,
+    });
+    const link = document.createElement('a');
+    link.download = 'triangle-pattern4.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  } finally {
+    btn.textContent = '⬇ 画像をダウンロード';
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
