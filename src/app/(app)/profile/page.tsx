@@ -211,6 +211,19 @@ export default function ProfilePage() {
       >
         {saving ? "保存中..." : "保存してマッチングへ"}
       </button>
+
+      <div className="mt-6 mb-2 text-center">
+        <p className="text-xs text-gray-400 mb-2">困ったことがあればお気軽にどうぞ</p>
+        <a
+          href="https://lin.ee/5dIINqQ"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 text-sm text-[#06C755] font-medium border border-[#06C755] rounded-xl px-4 py-2.5 hover:bg-[#06C755]/5 transition-colors"
+        >
+          <span className="text-base">💬</span>
+          公式LINEをフォローする
+        </a>
+      </div>
     </div>
   );
 }
