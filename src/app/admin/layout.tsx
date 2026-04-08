@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 const NAV_ITEMS = [
   { href: "/admin", label: "ダッシュボード", icon: "📊" },
   { href: "/admin/users", label: "ユーザー", icon: "👥" },
+  { href: "/admin/waiting", label: "待機中", icon: "⏳" },
   { href: "/admin/matches", label: "マッチング", icon: "🔗" },
   { href: "/admin/reviews", label: "レビュー", icon: "⭐" },
   { href: "/admin/invites", label: "招待コード", icon: "🎟️" },
