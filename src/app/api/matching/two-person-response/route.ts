@@ -16,26 +16,35 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { action } = await request.json();
+    const { action, requestId } = await request.json();
 
     if (action !== "accept" && action !== "decline") {
       return NextResponse.json({ error: "無効なアクションです" }, { status: 400 });
     }
 
     const { adminDb } = await import("@/lib/firebase/admin");
-    const matchReqSnap = await adminDb
-      .collection("match_requests")
-      .where("user_id", "==", user.id)
-      .where("status", "==", "two_person_offered")
-      .orderBy("created_at", "desc")
-      .limit(1)
-      .get();
+    let matchReqId: string;
 
-    if (matchReqSnap.empty) {
-      return NextResponse.json({ error: "2人マッチングオファーが見つかりません" }, { status: 404 });
+    if (requestId) {
+      const doc = await adminDb.collection("match_requests").doc(requestId).get();
+      if (!doc.exists || doc.data()?.user_id !== user.id || doc.data()?.status !== "two_person_offered") {
+        return NextResponse.json({ error: "2人マッチングオファーが見つかりません" }, { status: 404 });
+      }
+      matchReqId = doc.id;
+    } else {
+      const matchReqSnap = await adminDb
+        .collection("match_requests")
+        .where("user_id", "==", user.id)
+        .where("status", "==", "two_person_offered")
+        .orderBy("created_at", "desc")
+        .limit(1)
+        .get();
+
+      if (matchReqSnap.empty) {
+        return NextResponse.json({ error: "2人マッチングオファーが見つかりません" }, { status: 404 });
+      }
+      matchReqId = matchReqSnap.docs[0].id;
     }
-
-    const matchReqId = matchReqSnap.docs[0].id;
 
     if (action === "accept") {
       const groupId = await confirmTwoPersonMatch(matchReqId);

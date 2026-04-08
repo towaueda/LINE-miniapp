@@ -71,6 +71,7 @@ export default function MatchingPage() {
   const [matchError, setMatchError] = useState<string | null>(null);
   const [isTwoPersonOffered, setIsTwoPersonOffered] = useState(false);
   const [twoPersonDates, setTwoPersonDates] = useState<string[]>([]);
+  const [twoPersonRequestId, setTwoPersonRequestId] = useState<string | null>(null);
   const [isNoMatch, setIsNoMatch] = useState(false);
   const [dates] = useState(getNextThursdays);
 
@@ -102,6 +103,7 @@ export default function MatchingPage() {
       } else if (data.status === "two_person_offered") {
         setIsTwoPersonOffered(true);
         setTwoPersonDates(data.proposedDates || []);
+        setTwoPersonRequestId(data.requestId || null);
       } else if (data.status === "no_match") {
         setIsNoMatch(true);
       } else if (data.status === "waiting") {
@@ -183,7 +185,7 @@ export default function MatchingPage() {
     try {
       const data = await apiFetch<{ status: string; group?: ApiGroup; members?: ApiMember[] }>(
         '/api/matching/two-person-response',
-        { method: 'POST', body: JSON.stringify({ action }) }
+        { method: 'POST', body: JSON.stringify({ action, requestId: twoPersonRequestId }) }
       );
       if (data.status === 'matched' && data.group && data.members) {
         setIsTwoPersonOffered(false);
@@ -199,6 +201,8 @@ export default function MatchingPage() {
       }
     } catch (e) {
       console.error('Two person response failed:', e);
+      setIsTwoPersonOffered(false);
+      setMatchError('エラーが発生しました。もう一度お試しください。');
     }
   };
 
