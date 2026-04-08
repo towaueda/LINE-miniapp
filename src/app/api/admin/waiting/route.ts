@@ -20,7 +20,7 @@ export async function GET(request: Request) {
   const allDocs = [...waitingSnap.docs, ...twoPersonSnap.docs];
 
   // ユーザー情報をバッチ取得
-  const userIds = [...new Set(allDocs.map((d) => d.data().user_id as string))];
+  const userIds = Array.from(new Set(allDocs.map((d) => d.data().user_id as string)));
   const userDocs = await Promise.all(userIds.map((uid) => adminDb.collection("users").doc(uid).get()));
   const userMap: Record<string, { nickname: string; avatar_emoji: string }> = {};
   userDocs.forEach((d) => {
